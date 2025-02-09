@@ -611,6 +611,8 @@ enum class HeroType {
 #include <string>
 #include <iostream>
 #include <codecvt>
+#include <mutex>
+#include <atomic>
 
 
 
@@ -795,6 +797,8 @@ extern std::vector<uint32_t> merch_items2;
 
 extern std::vector<uint32_t> merchant_window_items;
 
+extern std::string global_agent_name;
+extern bool name_ready;
 
 
 #include <pybind11/pybind11.h>

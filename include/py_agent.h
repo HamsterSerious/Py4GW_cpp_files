@@ -154,7 +154,10 @@ public:
 public:
     PyLivingAgent(int agent_id);
     void GetContext();
+	void RequestName();
+    bool IsAgentNameReady();
 	std::string GetName();
+    
 };
 
 

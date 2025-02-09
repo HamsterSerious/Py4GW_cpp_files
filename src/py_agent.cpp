@@ -306,22 +306,43 @@ void PyLivingAgent::GetContext() {
     overcast = living->h0118;
 }
 
-std::string PyLivingAgent::GetName() {
-    /*
-	std::wstring wide_name;
-	GW::Agents::AsyncGetAgentName(GW::Agents::GetAgentByID(agent_id), wide_name);
-    while (name.empty())
-    {
-        Sleep(5);
-    }
-	if (!wide_name.empty()) {
-		char buffer[512];
-		const std::string agent_name_str = local_WStringToString(wide_name);
-		return agent_name_str;
-	}
-    */
-	return "";
+std::string global_agent_name;
+
+bool name_ready = false;
+
+void PyLivingAgent::RequestName() {
+	const auto agentid = agent_id;
+    name_ready = false;
+    //global_agent_name = "LOADING_NAME";
+
+    GW::GameThread::Enqueue([agentid] {
+        std::wstring temp_name;
+
+        // Fetch agent name in the game thread
+        GW::Agents::AsyncGetAgentName(GW::Agents::GetAgentByID(agentid), temp_name);
+
+		while (temp_name.empty()) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(5));
+		}
+
+        if (!temp_name.empty()) {
+            char buffer[512];
+            const std::string agent_name_str = local_WStringToString(temp_name);
+            global_agent_name =  agent_name_str;
+            name_ready = true;  // Mark name as available
+        }
+    });
+
 }
+
+bool PyLivingAgent::IsAgentNameReady() {
+    return name_ready;  // Check if the name is available
+}
+
+std::string PyLivingAgent::GetName() {
+    return global_agent_name;
+}
+
 
 
 PyItemAgent::PyItemAgent(int agent_id) : agent_id(agent_id) {
@@ -795,7 +816,9 @@ void bind_PyLivingAgent(py::module_& m) {
         .def_readonly("is_npc", &PyLivingAgent::is_npc)
         .def_readonly("casting_skill_id", &PyLivingAgent::casting_skill_id)
         .def_readonly("overcast", &PyLivingAgent::overcast)
-        .def("GetName", &PyLivingAgent::GetName);
+        .def("GetName", &PyLivingAgent::GetName)
+        .def("RequestName", &PyLivingAgent::RequestName)
+        .def("IsAgentNameReady", &PyLivingAgent::IsAgentNameReady);
 }
 
 
