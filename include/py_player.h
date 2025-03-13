@@ -55,6 +55,9 @@ public:
     void SendChatCommand(std::string msg);
     void SendChat(char channel, std::string msg);
     void SendWhisper(std::string name, std::string msg);
+    void SendFakeChat(int channel, std::string message);
+    void SendFakeChatColored(int channel, std::string message, int r, int g, int b);
+	std::string FormatChatMessage(const std::string message, int r, int g, int b);
     bool ChangeTarget(uint32_t target_id);
     bool Move(float x, float y, int zplane);
     bool Move(float x, float y);

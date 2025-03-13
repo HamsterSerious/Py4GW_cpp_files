@@ -166,6 +166,33 @@ struct LogEntry {
 
 std::vector<LogEntry> log_entries;
 
+std::string TrimString(const std::string& str) {
+    const std::string WHITESPACE = " \t\r\n\v\f\u00A0"; // Includes Unicode spaces
+    size_t first = str.find_first_not_of(WHITESPACE);
+    if (first == std::string::npos) return ""; // If all spaces or empty, return ""
+
+    size_t last = str.find_last_not_of(WHITESPACE);
+    std::string trimmed = str.substr(first, (last - first + 1));
+
+    std::string result;
+    bool in_space = false;
+
+    for (char c : trimmed) {
+        if (std::isspace(static_cast<unsigned char>(c))) {
+            if (!in_space) {
+                result += ' '; // Add only one space
+                in_space = true;
+            }
+        }
+        else {
+            result += c;
+            in_space = false;
+        }
+    }
+
+    return result;
+}
+
 void Log(const std::string& module_name, const std::string& message, MessageType type = MessageType::Info)
 {
     LogEntry entry;
@@ -184,6 +211,36 @@ void Log(const std::string& module_name, const std::string& message, MessageType
 
     // Add the entry to the log
     log_entries.push_back(entry);
+
+    if (!show_console) {
+	    std::string timestamp = GW::Chat::FormatChatMessage("[" + entry.timestamp + "]", 180, 180, 180);
+	    std::string module = GW::Chat::FormatChatMessage("[" + entry.module_name + "]", 100, 190, 255);
+    
+        class rgb {
+	    public:
+		    int r, g, b;
+		    rgb(int r, int g, int b) : r(r), g(g), b(b) {}
+	    } color(255, 255, 255);
+    
+        switch (type) {
+        case MessageType::Info:         color = { 255, 255, 255 }; break;
+        case MessageType::Error:        color = { 255, 0, 0 }; break;
+        case MessageType::Warning:      color = { 255, 255, 0 }; break;
+        case MessageType::Success:      color = { 0, 255, 0 }; break;
+        case MessageType::Debug:        color = { 0, 255, 255 }; break;
+        case MessageType::Performance:  color = { 255, 153, 0 }; break;
+        case MessageType::Notice:       color = { 153, 255, 153 }; break;
+        default:                        color = { 255, 255, 255 }; break;
+        }
+
+	    std::string formatted_message = message;
+        std::replace(formatted_message.begin(), formatted_message.end(), '\\', '/');
+        std::string formatted_chunk = GW::Chat::FormatChatMessage(formatted_message, color.r, color.g, color.b);
+        
+        formatted_chunk = timestamp + " " + module + " " + formatted_chunk;
+
+        GW::Chat::SendFakeChat(GW::Chat::Channel::CHANNEL_EMOTE, formatted_chunk);
+    }
 }
 
 // Function to load and execute Python scripts
@@ -680,10 +737,24 @@ void DrawConsole(const char* title, bool* new_p_open = nullptr)
         }
         ShowTooltipInternal("Copy console output to clipboard");
 
+        ImGui::TableNextColumn();
+        if (ImGui::Button(ICON_FA_WINDOW_MAXIMIZE "##MaximizeFULL")) {
+            show_console = !show_console;
+            Log("Py4GW", "Toggled Compact Cosole.", MessageType::Notice);
+        }
+        if (show_console) {
+            ShowTooltipInternal("Hide Console");
+        }
+        else {
+            ShowTooltipInternal("Show Compact Console");
+        }
+
+        /*
         // Toggle Timestamp Checkbox
         ImGui::TableSetColumnIndex(3);
         ImGui::Checkbox("Timestamps", &show_timestamps);
         ShowTooltipInternal("Show or hide timestamps in the console output");
+        */
 
         // Auto-Scroll Checkbox
         ImGui::TableSetColumnIndex(4);
@@ -821,6 +892,139 @@ void DrawConsole(const char* title, bool* new_p_open = nullptr)
     ImGui::End(); // Close the main window
 }
 
+bool show_console = false;
+
+
+void DrawCompactConsole(bool* new_p_open = nullptr) {
+    // Compact console window with fixed auto-resizing
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_AlwaysAutoResize;
+    if (!ImGui::Begin("Py4GW##compactPy4GWconsole", new_p_open, flags)) {
+        ImGui::End();
+        return;
+    }
+
+    // Table for Script Path Input + Browse Button
+    if (ImGui::BeginTable("compactPy4GWconsoletable", 2, ImGuiTableFlags_SizingFixedFit)) {
+        ImGui::TableSetupColumn("InputColumn");
+        ImGui::TableSetupColumn("ButtonColumn");
+
+        ImGui::TableNextRow();
+
+        // First Column: Script Path Input
+        ImGui::TableNextColumn();
+        ImGui::SetNextItemWidth(70);
+        ImGui::InputText("##Path", script_path, IM_ARRAYSIZE(script_path));
+        if (ImGui::IsItemHovered() && strlen(script_path) > 0) {
+            ShowTooltipInternal(script_path);
+        }
+
+        // Second Column: Browse Button
+        ImGui::TableNextColumn();
+        if (ImGui::Button(ICON_FA_FOLDER_OPEN "##Open", ImVec2(30, 30))) {
+            std::string selected_file_path = OpenFileDialog();
+            if (!selected_file_path.empty()) {
+                strcpy(script_path, selected_file_path.c_str());
+                Log("Py4GW", "Selected script: " + selected_file_path, MessageType::Notice);
+                script_state = ScriptState::Stopped;
+            }
+        }
+		ShowTooltipInternal("Open Python script");
+
+        ImGui::EndTable();
+    }
+
+    // Table for Action Buttons
+    if (ImGui::BeginTable("compactPy4GWButtonTable", 3)) {
+        ImGui::TableNextColumn();
+        if (script_state == ScriptState::Stopped) {
+            if (ImGui::Button(ICON_FA_PLAY "##Run", ImVec2(30, 30))) {
+                if (LoadAndExecuteScriptOnce()) {
+                    script_state = ScriptState::Running;
+                    script_timer.reset();
+                    Log("Py4GW", "Script started.", MessageType::Notice);
+                }
+                else {
+                    ResetScriptEnvironment();
+                    script_state = ScriptState::Stopped;
+                    script_timer.stop();
+                    Log("Py4GW", "Script stopped.", MessageType::Notice);
+                }
+				ShowTooltipInternal("Load and run script");
+            }
+        }
+        else if (script_state == ScriptState::Running) {
+            if (ImGui::Button(ICON_FA_PAUSE "##Pause", ImVec2(30, 30))) {
+                script_state = ScriptState::Paused;
+                script_timer.Pause();
+                Log("Py4GW", "Script paused.", MessageType::Notice);
+            }
+			ShowTooltipInternal("Pause execution");
+        }
+        else if (script_state == ScriptState::Paused) {
+            if (ImGui::Button(ICON_FA_PLAY "##Resume", ImVec2(30, 30))) {
+                script_state = ScriptState::Running;
+                script_timer.Resume();
+                Log("Py4GW", "Script resumed.", MessageType::Notice);
+            }
+			ShowTooltipInternal("Resume execution");
+        }
+
+        ImGui::TableNextColumn();
+        if (ImGui::Button(ICON_FA_STOP "##Stop", ImVec2(30, 30))) {
+            ResetScriptEnvironment();
+            script_state = ScriptState::Stopped;
+            script_timer.stop();
+            Log("Py4GW", "Script stopped.", MessageType::Notice);
+        }
+		ShowTooltipInternal("Stop execution");
+
+        ImGui::TableNextColumn();
+        if (ImGui::Button(ICON_FA_WINDOW_MAXIMIZE "##Maximize", ImVec2(30, 30))) {
+			show_console = !show_console;
+            Log("Py4GW", "Toggled Full Cosole.", MessageType::Notice);
+        }
+		if (show_console) {
+			ShowTooltipInternal("Hide Full Console");
+		}
+		else {
+			ShowTooltipInternal("Show Full Console");
+		}
+
+        // Second row
+        ImGui::TableNextColumn();
+        if (ImGui::Button(ICON_FA_STICKY_NOTE "##StickyNote", ImVec2(30, 30))) {
+            log_entries.clear();
+        }
+        ShowTooltipInternal("Clear the console output");
+
+        ImGui::TableNextColumn();
+        if (ImGui::Button(ICON_FA_SAVE "##Save", ImVec2(30, 30))) {
+            std::string save_path = SaveFileDialog();
+            if (!save_path.empty()) {
+                SaveLogToFile(save_path);
+            }
+        }
+		ShowTooltipInternal("Save console output to file");
+
+        ImGui::TableNextColumn();
+        if (ImGui::Button(ICON_FA_COPY "##Copy", ImVec2(30, 30))) {
+            CopyLogToClipboard();
+        }
+		ShowTooltipInternal("Copy console output to clipboard");
+
+        ImGui::EndTable();
+    }
+
+    ImGui::Separator();
+
+    // Display Script Status (Red if Stopped, Green if Running)
+    ImVec4 status_color = (script_state == ScriptState::Running) ? ImVec4(0, 1, 0, 1) : ImVec4(1, 0, 0, 1);
+    ImGui::TextColored(status_color, script_state == ScriptState::Running ? "Running" : "Stopped");
+
+    ImGui::End();
+}
+
+
 std::string GetCredits()
 { 
     return "Py4GW v1.0.57, Apoguita - 2024,2025";
@@ -873,104 +1077,15 @@ bool ChangeWorkingDirectory(const std::string& new_directory) {
 bool HeroAI_Initialized = false;
 
 void Py4GW::Update() {
+    /*
     if (HeroAI_Initialized) {
         if (heroAI->IsAIEnabled() && AllowedToRender()) {
             heroAI->Update();
         }
     }
+    */
 }
 
-
-/* 
-class KeyHandler {
-public:
-    // Press a single key using scan codes
-    void press_key(int virtualKeyCode)
-    {
-        HWND targetWindow = gw_client_window_handle; // Get the target window handle
-        if (!targetWindow) return;                 // Fail silently if no window is set
-
-        // Attach input thread to target thread
-        DWORD targetThreadId = GetWindowThreadProcessId(targetWindow, nullptr);
-        DWORD currentThreadId = GetCurrentThreadId();
-        AttachThreadInput(currentThreadId, targetThreadId, TRUE);
-
-        // Focus the target window
-        SetForegroundWindow(targetWindow);
-        SetActiveWindow(targetWindow);
-
-        // Send key press
-        INPUT input = { 0 };
-        input.type = INPUT_KEYBOARD;
-        input.ki.wVk = 0;                                                // Use scan code mode
-        input.ki.wScan = MapVirtualKey(virtualKeyCode, MAPVK_VK_TO_VSC); // Map virtual key to scan code
-        input.ki.dwFlags = 0;                                            // Key press
-        SendInput(1, &input, sizeof(INPUT));
-
-        // Detach thread input
-        AttachThreadInput(currentThreadId, targetThreadId, FALSE);
-    }
-
-    // Release a single key using scan codes
-    void release_key(int virtualKeyCode)
-    {
-        HWND targetWindow = gw_client_window_handle; // Get the target window handle
-        if (!targetWindow) return;
-
-        // Attach input thread to target thread
-        DWORD targetThreadId = GetWindowThreadProcessId(targetWindow, nullptr);
-        DWORD currentThreadId = GetCurrentThreadId();
-        AttachThreadInput(currentThreadId, targetThreadId, TRUE);
-
-        // Focus the target window
-        SetForegroundWindow(targetWindow);
-        SetActiveWindow(targetWindow);
-
-        // Send key release
-        INPUT input = { 0 };
-        input.type = INPUT_KEYBOARD;
-        input.ki.wVk = 0;                                                // Use scan code mode
-        input.ki.wScan = MapVirtualKey(virtualKeyCode, MAPVK_VK_TO_VSC); // Map virtual key to scan code
-        input.ki.dwFlags = KEYEVENTF_KEYUP;                              // Key release
-        SendInput(1, &input, sizeof(INPUT));
-
-        // Detach thread input
-        AttachThreadInput(currentThreadId, targetThreadId, FALSE);
-    }
-
-    // Press and release a key (push key)
-    void push_key(int virtualKeyCode)
-    {
-        press_key(virtualKeyCode);
-        Sleep(50); // Mimic a real press delay
-        release_key(virtualKeyCode);
-    }
-
-    // Press a combination of keys
-    void press_key_combo(const std::vector<int>& keys)
-    {
-        for (int key : keys) {
-            press_key(key);
-        }
-    }
-
-    // Release a combination of keys
-    void release_key_combo(const std::vector<int>& keys)
-    {
-        for (int key : keys) {
-            release_key(key);
-        }
-    }
-
-    // Push a combination of keys
-    void push_key_combo(const std::vector<int>& keys)
-    {
-        press_key_combo(keys);
-        Sleep(100); // Mimic a real delay
-        release_key_combo(keys);
-    }
-};
-*/
 
 class KeyHandler {
     HWND targetWindow;
@@ -1041,9 +1156,6 @@ public:
 
 
 
-
-//KeyHandler keys = KeyHandler();
-
 bool debug = false;
 
 bool show_modal = false;
@@ -1055,7 +1167,15 @@ bool check_login_screen = true;
 
 void Py4GW::Draw(IDirect3DDevice9*) {
 
-    DrawConsole("Py4GW Console", &console_open);
+	bool is_map_loading = GW::Map::GetInstanceType() == GW::Constants::InstanceType::Loading;
+
+	if (show_console || is_map_loading) {
+		DrawConsole("Py4GW Console", &console_open);
+	}
+	else {
+		DrawCompactConsole(&console_open);
+	}
+    //DrawConsole("Py4GW Console", &console_open);
     
     if (first_run) {
         first_run = false;

@@ -407,6 +407,18 @@ void PyPlayer::SendWhisper(std::string name, std::string msg) {
     GW::Chat::SendChat(name.c_str(), msg.c_str());
 }
 
+void PyPlayer::SendFakeChat(int channel, std::string message) {
+	GW::Chat::SendFakeChat(channel, message);
+}
+
+void PyPlayer::SendFakeChatColored(int channel, std::string message, int r, int g, int b) {
+	GW::Chat::SendFakeChatColored(channel, message, r, g, b);
+}
+
+std::string PyPlayer::FormatChatMessage(const std::string message, int r, int g, int b) {
+	return GW::Chat::FormatChatMessage(message, r, g, b);
+}
+
 bool PyPlayer::ChangeTarget(uint32_t new_target_id) {
 	if (new_target_id == 0) return false;
 
@@ -522,6 +534,9 @@ void BindPyPlayer(py::module_& m) {
         .def("SendChatCommand", &PyPlayer::SendChatCommand, py::arg("msg"))  // Bind the SendChatCommand method
         .def("SendChat", &PyPlayer::SendChat, py::arg("channel"), py::arg("msg"))  // Bind the SendChat method
         .def("SendWhisper", &PyPlayer::SendWhisper, py::arg("name"), py::arg("msg"))  // Bind the SendWhisper method
+		.def("SendFakeChat", &PyPlayer::SendFakeChat, py::arg("channel"), py::arg("message"))  // Bind the SendFakeChat method
+		.def("SendFakeChatColored", &PyPlayer::SendFakeChatColored, py::arg("channel"), py::arg("message"), py::arg("r"), py::arg("g"), py::arg("b"))  // Bind the SendFakeChatColored method
+		.def("FormatChatMessage", &PyPlayer::FormatChatMessage, py::arg("message"), py::arg("r"), py::arg("g"), py::arg("b"))  // Bind the FormatChatMessage method
         .def("ChangeTarget", &PyPlayer::ChangeTarget, py::arg("target_id"))  // Bind the ChangeTarget method
         .def("Move", py::overload_cast<float, float, int>(&PyPlayer::Move), py::arg("x"), py::arg("y"), py::arg("zplane"))  // Bind the Move method (with zplane)
         .def("Move", py::overload_cast<float, float>(&PyPlayer::Move), py::arg("x"), py::arg("y"))  // Bind the Move method (without zplane)

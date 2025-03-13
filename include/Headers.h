@@ -45,6 +45,7 @@ enum combatState { cIdle, cInCastingRoutine };
 #include <sstream>
 #include <fstream>  // For std::ifstream
 
+
 #include "GuiUtils.h"
 #include "IconsFontAwesome5.h"
 #include <nlohmann/json.hpp>
@@ -810,6 +811,8 @@ extern bool chat_log_ready;  // Indicates if decoding is done
 
 extern std::string global_item_name;
 extern bool item_name_ready;
+
+extern bool show_console;
 
 
 

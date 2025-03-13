@@ -10,6 +10,7 @@
 #include <GWCA/Managers/ChatMgr.h>
 #include <GWCA/Utilities/MemoryPatcher.h>
 #include <GWCA/Managers/GameThreadMgr.h>
+#include <iomanip> 
 
 #define COLOR_ARGB(a, r, g, b) (GW::Chat::Color)((((a) & 0xff) << 24) | (((r) & 0xff) << 16) | (((g) & 0xff) << 8) | ((b) & 0xff))
 #define COLOR_RGB(r, g, b) COLOR_ARGB(0xff, r, g, b)
@@ -623,6 +624,45 @@ nullptr,                       // param
         transient_chat_message = nullptr;
         if (delete_message)
             delete[] param.message;
+    }
+    
+
+        
+    void Chat::SendFakeChat(int channel, std::string message) {
+        std::wstring wmessage(message.begin(), message.end());  // Convert std::string to std::wstring
+
+        GW::GameThread::Enqueue([channel, wmessage]() {
+            WriteChat(static_cast<Channel>(channel), wmessage.c_str(), nullptr, true);
+            });
+    }
+
+    void Chat::SendFakeChatColored(int channel, std::string message, int r, int g, int b) {
+        // Format the entire message with the given color
+        std::string formatted_message = Chat::FormatChatMessage(message, r, g, b);
+        std::wstring wformatted_message(formatted_message.begin(), formatted_message.end()); // Convert to wstring
+
+        // Send the formatted message as a whole, assuming it's already split
+        GW::GameThread::Enqueue([channel, wformatted_message]() {
+            WriteChat(static_cast<Channel>(channel), wformatted_message.c_str(), nullptr, true);
+            });
+    }
+
+
+    std::string Chat::FormatChatMessage(const std::string message, int r, int g, int b) {
+        // Ensure RGB values are clamped between 1 and 255
+        r = std::max(1, std::min(255, r));
+        g = std::max(1, std::min(255, g));
+        b = std::max(1, std::min(255, b));
+
+        // Convert RGB to hex format
+        std::ostringstream formatted;
+        formatted << "<c=#" << std::hex << std::uppercase << std::setfill('0')
+            << std::setw(2) << r
+            << std::setw(2) << g
+            << std::setw(2) << b
+            << ">" << message << "</c>";
+
+        return formatted.str();
     }
 
     void Chat::CreateCommand(const wchar_t* cmd, Chat::ChatCommandCallback callback) {

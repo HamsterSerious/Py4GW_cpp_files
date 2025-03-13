@@ -460,6 +460,20 @@ void ImGui_TableHeadersRow() {
     ImGui::TableHeadersRow();
 }
 
+int ImGui_TableGetColumnCount() {
+    return ImGui::TableGetColumnCount();
+}
+
+int ImGui_TableGetColumnIndex() {
+	return ImGui::TableGetColumnIndex();
+}
+
+int ImGui_TableGetRowIndex() {
+	return ImGui::TableGetRowIndex();
+}
+
+
+
 // Tabs
 bool ImGui_BeginTabBar(const std::string& str_id) {
     return ImGui::BeginTabBar(str_id.c_str());
@@ -648,7 +662,6 @@ std::array<float, 2> ImGui_GetWindowContentRegionMax() {
 }
 
 
-
 // Mouse
 bool ImGui_IsMouseClicked(int button) {
     return ImGui::IsMouseClicked(button);
@@ -760,6 +773,9 @@ void ImGui_SetNextItemOpen(bool is_open, ImGuiCond cond = 0) {
     ImGui::SetNextItemOpen(is_open, cond);
 }
 
+void ImGui_SetNextItemWidth(float item_width) {
+	ImGui::SetNextItemWidth(item_width);
+}
 // collapsing headers
 // Function to wrap ImGui::CollapsingHeader without flags
 bool ImGui_CollapsingHeader(const std::string& label) {
@@ -1293,6 +1309,9 @@ PYBIND11_EMBEDDED_MODULE(PyImGui, m) {
     m.def("table_setup_column", py::overload_cast<const std::string&>(&ImGui_TableSetupColumn), py::arg("label"));
     m.def("table_setup_column", py::overload_cast<const std::string&, ImGuiTableColumnFlags>(&ImGui_TableSetupColumn), py::arg("label"), py::arg("flags"));
     m.def("table_headers_row", &ImGui_TableHeadersRow, "Submit a headers row for a table");
+	m.def("table_get_column_count", &ImGui_TableGetColumnCount, "Returns the number of columns in the table");
+	m.def("table_get_column_index", &ImGui_TableGetColumnIndex, "Returns the current column index in the table");
+	m.def("table_get_row_index", &ImGui_TableGetRowIndex, "Returns the current row index in the table");
     m.def("table_next_row", &ImGui_TableNextRow, "Moves to the next row in the table");
     m.def("table_next_column", &ImGui_TableNextColumn, "Moves to the next column in the table");
     m.def("table_set_column_index", &ImGui_TableSetColumnIndex, "Sets the current column index in the table");
@@ -1331,6 +1350,7 @@ PYBIND11_EMBEDDED_MODULE(PyImGui, m) {
     m.def("get_window_content_region_min", &ImGui_GetWindowContentRegionMin, "Get the minimum content region within the window (x, y)");
     m.def("get_window_content_region_max", &ImGui_GetWindowContentRegionMax, "Get the maximum content region within the window (x, y)");
 
+
     // Input Handling
     m.def("is_mouse_clicked", &ImGui_IsMouseClicked, "Checks if the mouse button is clicked");
 	m.def("is_mouse_double_clicked", &ImGui_IsMouseDoubleClicked, "Checks if the mouse button is double clicked");
@@ -1358,6 +1378,7 @@ PYBIND11_EMBEDDED_MODULE(PyImGui, m) {
     m.def("tree_pop", &ImGui_TreePop);
     m.def("get_tree_node_to_label_spacing", &ImGui_GetTreeNodeToLabelSpacing);
     m.def("set_next_item_open", &ImGui_SetNextItemOpen, py::arg("is_open"), py::arg("cond") = 0);
+	m.def("set_next_item_width", &ImGui_SetNextItemWidth, py::arg("item_width"));
 
     m.def("collapsing_header", py::overload_cast<const std::string&>(&ImGui_CollapsingHeader));
     m.def("collapsing_header", py::overload_cast<const std::string&, ImGuiTreeNodeFlags>(&ImGui_CollapsingHeader));
