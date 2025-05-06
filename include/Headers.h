@@ -820,6 +820,8 @@ extern bool show_console;
 
 extern IDirect3DDevice9* g_d3d_device;
 
+extern std::chrono::steady_clock::time_point last_agent_array_update;
+
 
 
 #include <pybind11/pybind11.h>

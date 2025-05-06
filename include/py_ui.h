@@ -192,6 +192,13 @@ public:
         
 	}
 
+    static void TestMouseAction(uint32_t frame_id, uint32_t current_state, uint32_t wparam_value = 0, uint32_t lparam=0) {
+        GW::GameThread::Enqueue([frame_id, current_state, wparam_value, lparam]() {
+			GW::UI::TestMouseAction(frame_id, current_state, wparam_value, lparam);
+            });
+
+    }
+
 	static uint32_t GetRootFrameID() {
 		GW::UI::Frame* frame = GW::UI::GetRootFrame();
 		if (!frame) {
@@ -358,6 +365,7 @@ public:
 	static bool IsShiftScreenShot() {
 		return GW::UI::GetIsShiftScreenShot();
 	}
+
 };
 
 
@@ -511,6 +519,7 @@ PYBIND11_EMBEDDED_MODULE(PyUIManager, m) {
             .def_static("set_bool_preference", &UIManager::SetBoolPreference, py::arg("pref"), py::arg("value"), "Sets the value of a boolean preference.")
 
             .def_static("button_click", &UIManager::ButtonClick, py::arg("frame_id"), "Simulates a button click on a frame.")
+			.def_static("test_mouse_action", &UIManager::TestMouseAction, py::arg("frame_id"), py::arg("current_state"), py::arg("wparam_value") = 0, py::arg("lparam") = 0, "Simulates a mouse action on a frame.")
             .def_static("get_root_frame_id", &UIManager::GetRootFrameID, "Gets the ID of the root frame.")
             .def_static("is_world_map_showing", &UIManager::IsWorldMapShowing, "Checks if the world map is currently showing.")
             .def_static("get_frame_limit", &UIManager::GetFrameLimit, "Gets the frame limit.")

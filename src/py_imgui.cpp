@@ -65,6 +65,17 @@ bool ImGui_Button(const std::string& label, float width = 0, float height = 0) {
     return ImGui::Button(label.c_str(), ImVec2(width, height));
 }
 
+//invisible button
+bool ImGui_InvisibleButton(const std::string& label, float width, float height) {
+    return ImGui::InvisibleButton(label.c_str(), ImVec2(width, height));
+}
+
+//small button
+bool ImGui_SmallButton(const std::string& label) {
+	return ImGui::SmallButton(label.c_str());
+}
+
+
 // Checkbox
 bool ImGui_Checkbox(const std::string& label, bool v) {
     bool temp = v;
@@ -452,8 +463,28 @@ void ImGui_TableSetupColumn(const std::string& label, ImGuiTableColumnFlags flag
     ImGui::TableSetupColumn(label.c_str(), flags);
 }
 
+void ImGui_TableSetupColumn(const std::string& label, ImGuiTableColumnFlags flags, float init_width_or_weight) {
+	ImGui::TableSetupColumn(label.c_str(), flags, init_width_or_weight);
+}
+
 void ImGui_TableSetColumnIndex(int column_index) {
     ImGui::TableSetColumnIndex(column_index);
+}
+
+void ImGui_SetColumnWidth(int column_index, float width) {
+	ImGui::SetColumnWidth(column_index, width);
+}
+
+void ImGui_SetColumnOffset(int column_index, float offset) {
+	ImGui::SetColumnOffset(column_index, offset);
+}
+
+void ImGui_TableSetColumnEnabled(int column_index, bool enabled) {
+	ImGui::TableSetColumnEnabled(column_index, enabled);
+}
+
+void ImGui_TableSetBgColor(int target, ImU32 color, int column_n = -1) {
+    ImGui::TableSetBgColor(static_cast<ImGuiTableBgTarget>(target), color, column_n);
 }
 
 void ImGui_TableGetSortSpecs() {
@@ -675,6 +706,12 @@ std::array<float, 2> ImGui_GetWindowContentRegionMax() {
 
 
 // Mouse
+
+//set mouse button
+void ImGui_SetMouseCursor(int cursor) {
+	ImGui::SetMouseCursor(cursor);
+}
+
 bool ImGui_IsMouseClicked(int button) {
     return ImGui::IsMouseClicked(button);
 }
@@ -699,6 +736,10 @@ bool ImGui_IsMouseDragging(int button, float lock_threshold) {
 // Hovering
 bool ImGui_IsItemHovered() {
     return ImGui::IsItemHovered();
+}
+
+bool ImGui_IsItemClicked(int button) {
+	return ImGui::IsItemClicked(button);
 }
 
 // Is Window Open
@@ -750,6 +791,18 @@ void EndTooltip() {
 // Log to Clipboard
 void ImGui_LogToClipboard() {
     ImGui::LogToClipboard();
+}
+
+void ImGui_LogFinish() {
+	ImGui::LogFinish();
+}
+
+std::string ImGui_GetClipboardText() {
+	return ImGui::GetClipboardText();
+}
+
+void ImGui_SetClipboardText(const std::string& text) {
+	ImGui::SetClipboardText(text.c_str());
 }
 
 //tree nodes
@@ -1148,6 +1201,8 @@ PYBIND11_EMBEDDED_MODULE(PyImGui, m) {
     m.def("calc_text_size", &ImGui_CalcTextSize, "Calculates the size of a text in ImGui");
 
     m.def("button", &ImGui_Button, py::arg("label"), py::arg("width") = 0, py::arg("height") = 0, "Creates an ImGui button with an optional size.");
+	m.def("invisible_button", &ImGui_InvisibleButton, "Creates an invisible button in ImGui");
+	m.def("small_button", &ImGui_SmallButton, "Creates a small button in ImGui");
     m.def("checkbox", &ImGui_Checkbox, "Creates a checkbox in ImGui");
     //m.def("radio_button", &ImGui_RadioButton, "Creates a radio button in ImGui");
     m.def("radio_button", [](const std::string& label, int v, int button_index) {
@@ -1321,6 +1376,7 @@ PYBIND11_EMBEDDED_MODULE(PyImGui, m) {
     m.def("end_table", &ImGui_EndTable, "Ends the table in ImGui");
     m.def("table_setup_column", py::overload_cast<const std::string&>(&ImGui_TableSetupColumn), py::arg("label"));
     m.def("table_setup_column", py::overload_cast<const std::string&, ImGuiTableColumnFlags>(&ImGui_TableSetupColumn), py::arg("label"), py::arg("flags"));
+	m.def("table_setup_column", py::overload_cast<const std::string&, ImGuiTableColumnFlags, float>(&ImGui_TableSetupColumn), py::arg("label"), py::arg("flags"), py::arg("init_width_or_weight"));
     m.def("table_headers_row", &ImGui_TableHeadersRow, "Submit a headers row for a table");
 	m.def("table_get_column_count", &ImGui_TableGetColumnCount, "Returns the number of columns in the table");
 	m.def("table_get_column_index", &ImGui_TableGetColumnIndex, "Returns the current column index in the table");
@@ -1328,6 +1384,10 @@ PYBIND11_EMBEDDED_MODULE(PyImGui, m) {
     m.def("table_next_row", &ImGui_TableNextRow, "Moves to the next row in the table");
     m.def("table_next_column", &ImGui_TableNextColumn, "Moves to the next column in the table");
     m.def("table_set_column_index", &ImGui_TableSetColumnIndex, "Sets the current column index in the table");
+	m.def("table_set_column_width", &ImGui_SetColumnWidth, "Sets the width of a column in the table");
+	m.def("table_set_column_enabled", &ImGui_TableSetColumnEnabled, "Enables or disables a column in the table");
+	m.def("table_set_column_offset", &ImGui_SetColumnOffset, "Sets the offset of a column in the table");
+	m.def("table_set_bg_color", &ImGui_TableSetBgColor, "Sets the background color of a table cell");
     m.def("table_get_sort_specs", []() -> ImGuiTableSortSpecs* {
         return ImGui::TableGetSortSpecs();  // Return a pointer to the sort specs
         }, py::return_value_policy::reference);
@@ -1377,12 +1437,14 @@ PYBIND11_EMBEDDED_MODULE(PyImGui, m) {
 
 
     // Input Handling
+	m.def("set_mouse_cursor", &ImGui_SetMouseCursor, "Sets the mouse cursor in ImGui");
     m.def("is_mouse_clicked", &ImGui_IsMouseClicked, "Checks if the mouse button is clicked");
 	m.def("is_mouse_double_clicked", &ImGui_IsMouseDoubleClicked, "Checks if the mouse button is double clicked");
 	m.def("is_mouse_down", &ImGui_IsMouseDown, "Checks if the mouse button is down");
 	m.def("is_mouse_released", &ImGui_IsMouseReleased, "Checks if the mouse button is released");
 	m.def("is_mouse_dragging", &ImGui_IsMouseDragging, "Checks if the mouse is dragging");
     m.def("is_item_hovered", &ImGui_IsItemHovered, "Checks if the last item is hovered");
+	m.def("is_item_clicked", &ImGui_IsItemClicked, "Checks if the last item is clicked");
     m.def("is_item_active", &ImGui_IsItemActive, "Checks if the last item is active");
     m.def("is_key_pressed", &ImGui_IsKeyPressed, "Checks if a key is pressed");
 
@@ -1393,6 +1455,9 @@ PYBIND11_EMBEDDED_MODULE(PyImGui, m) {
     m.def("begin_tooltip", &BeginTooltip, "Begins a tooltip in ImGui");
     m.def("end_tooltip", &EndTooltip, "Ends a tooltip in ImGui");
     m.def("log_to_clipboard", &ImGui_LogToClipboard, "Logs text to the clipboard in ImGui");
+	m.def("log_finish", &ImGui_LogFinish, "Finishes logging in ImGui");
+	m.def("get_clipboard_text", &ImGui_GetClipboardText, "Gets text from the clipboard in ImGui");
+	m.def("set_clipboard_text", &ImGui_SetClipboardText, "Sets text to the clipboard in ImGui");
 
     // Tree Nodes
     m.def("tree_node", py::overload_cast<const std::string&>(&ImGui_TreeNode));

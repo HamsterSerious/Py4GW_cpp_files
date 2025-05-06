@@ -1003,6 +1003,7 @@ namespace GW {
         GWCA_API GW::Constants::Language GetTextLanguage();
 
         GWCA_API bool ButtonClick(Frame* btn_frame);
+        GWCA_API bool TestMouseAction(uint32_t frame_id, uint32_t current_state, uint32_t wparam, uint32_t lparam);
 
         GWCA_API Frame* GetRootFrame();
 

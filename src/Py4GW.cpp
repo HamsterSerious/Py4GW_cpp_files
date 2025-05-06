@@ -1102,6 +1102,7 @@ public:
         return targetWindow;
     }
 
+    /*
     void send_key(int virtualKeyCode, bool isKeyUp = false) {
         if (!targetWindow) return;
 
@@ -1112,7 +1113,49 @@ public:
 
         // Send the message directly to the target window
         SendMessage(targetWindow, isKeyUp ? WM_KEYUP : WM_KEYDOWN, virtualKeyCode, lParam);
+    }*/
+
+    bool is_extended_key(int vk) {
+        switch (vk) {
+        case VK_RIGHT:
+        case VK_LEFT:
+        case VK_UP:
+        case VK_DOWN:
+        case VK_INSERT:
+        case VK_DELETE:
+        case VK_HOME:
+        case VK_END:
+        case VK_PRIOR:  // Page Up
+        case VK_NEXT:   // Page Down
+        case VK_NUMLOCK:
+        case VK_DIVIDE: // Numpad Divide
+        case VK_RETURN: // Only if it's the numpad Enter
+            return true;
+        default:
+            return false;
+        }
     }
+
+
+    void send_key(int virtualKeyCode, bool isKeyUp = false) {
+        if (!targetWindow) return;
+
+        // Base lParam setup
+        LPARAM lParam = 1; // Repeat count = 1
+        lParam |= MapVirtualKey(virtualKeyCode, MAPVK_VK_TO_VSC) << 16;
+
+        // Check if it's an extended key
+        if (is_extended_key(virtualKeyCode)) {
+            lParam |= 0x01000000;  // Set Extended Key flag
+        }
+
+        if (isKeyUp) {
+            lParam |= 0xC0000000;  // Key-up flag and previous key state
+        }
+
+        SendMessage(targetWindow, isKeyUp ? WM_KEYUP : WM_KEYDOWN, virtualKeyCode, lParam);
+    }
+
 
     // Press a single key
     void press_key(int virtualKeyCode) {
@@ -1152,7 +1195,105 @@ public:
         Sleep(100); // Mimic a real delay
         release_key_combo(keys);
     }
+
+
 };
+
+class MouseHandler {
+    HWND targetWindow;
+
+public:
+    MouseHandler() {
+        targetWindow = gw_client_window_handle;
+    }
+
+    void set_target_window(HWND windowHandle) {
+        targetWindow = windowHandle;
+    }
+
+    HWND get_target_window() const {
+        return targetWindow;
+    }
+
+    // Move mouse virtually within client area (no real cursor movement)
+    void MoveMouse(int x, int y) {
+        if (!targetWindow) return;
+
+        LPARAM lParam = (y << 16) | (x & 0xFFFF);
+        PostMessage(targetWindow, WM_MOUSEMOVE, 0, lParam);
+    }
+
+    // Click (Left=0, Right=1, Middle=2)
+    void Click(int button = 0, int x = 0, int y = 0) {
+        if (!targetWindow) return;
+
+        PressButton(button, x, y);
+        ReleaseButton(button, x, y);
+    }
+
+    // Double Click
+    void DoubleClick(int button = 0, int x = 0, int y = 0) {
+        if (!targetWindow) return;
+
+        LPARAM lParam = (y << 16) | (x & 0xFFFF);
+        UINT msg;
+
+        if (button == 2)
+            msg = WM_MBUTTONDBLCLK;
+        else if (button == 1)
+            msg = WM_RBUTTONDBLCLK;
+        else
+            msg = WM_LBUTTONDBLCLK;
+
+        PostMessage(targetWindow, msg, 0, lParam);
+    }
+
+    // Press button down
+    void PressButton(int button = 0, int x = 0, int y = 0) {
+        if (!targetWindow) return;
+
+        LPARAM lParam = (y << 16) | (x & 0xFFFF);
+        UINT msg;
+
+        if (button == 2)
+            msg = WM_MBUTTONDOWN;
+        else if (button == 1)
+            msg = WM_RBUTTONDOWN;
+        else
+            msg = WM_LBUTTONDOWN;
+
+        PostMessage(targetWindow, msg, 0, lParam);
+    }
+
+    // Release button
+    void ReleaseButton(int button = 0, int x = 0, int y = 0) {
+        if (!targetWindow) return;
+
+        LPARAM lParam = (y << 16) | (x & 0xFFFF);
+        UINT msg;
+
+        if (button == 2)
+            msg = WM_MBUTTONUP;
+        else if (button == 1)
+            msg = WM_RBUTTONUP;
+        else
+            msg = WM_LBUTTONUP;
+
+        PostMessage(targetWindow, msg, 0, lParam);
+    }
+
+    // Scroll (positive = up, negative = down)
+    void Scroll(int delta, int x = 0, int y = 0) {
+        if (!targetWindow) return;
+
+        LPARAM lParam = (y << 16) | (x & 0xFFFF);
+        WPARAM wParam = (delta << 16);  // Scroll amount in high word
+
+        PostMessage(targetWindow, WM_MOUSEWHEEL, wParam, lParam);
+    }
+};
+
+
 
 
 
@@ -1302,82 +1443,15 @@ void Py4GW::Draw(IDirect3DDevice9* device) {
 
 }
 
-void SetFog(bool enable) {
-    GW::GameThread::Enqueue([enable]() {
-        GW::CameraMgr::SetFog(enable);
-        });
-}
-
-
-
 
 
 
 HWND Py4GW::get_gw_window_handle() { return gw_window_handle; }
 
-bool Py4GW::HeroAI_IsAIEnabled() { return heroAI->IsAIEnabled(); }
-void Py4GW::HeroAI_SetAIEnabled(bool state) { heroAI->SetAIEnabled(state); }
-int  Py4GW::HeroAI_GetMyPartyPos() { return heroAI->GetMyPartyPos(); }
-// ********** Python Vars **********
-
-bool Py4GW::HeroAI_IsActive(int party_pos) { return heroAI->IsActive(party_pos); }
-void Py4GW::HeroAI_SetLooting(int party_pos, bool state) { heroAI->SetLooting(party_pos, state); }
-bool Py4GW::HeroAI_GetLooting(int party_pos) { return heroAI->GetLooting(party_pos); }
-void Py4GW::HeroAI_SetFollowing(int party_pos, bool state) { heroAI->SetFollowing(party_pos, state); }
-bool Py4GW::HeroAI_GetFollowing(int party_pos) { return heroAI->GetFollowing(party_pos); }
-void Py4GW::HeroAI_SetCombat(int party_pos, bool state) { heroAI->SetCombat(party_pos, state); }
-bool Py4GW::HeroAI_GetCombat(int party_pos) { return heroAI->GetCombat(party_pos); }
-void Py4GW::HeroAI_SetCollision(int party_pos, bool state) { heroAI->SetCollision(party_pos, state); }
-bool Py4GW::HeroAI_GetCollision(int party_pos) { return heroAI->GetCollision(party_pos); }
-void Py4GW::HeroAI_SetTargetting(int party_pos, bool state) { heroAI->SetTargetting(party_pos, state); }
-bool Py4GW::HeroAI_GetTargetting(int party_pos) { return heroAI->GetTargetting(party_pos); }
-void Py4GW::HeroAI_SetSkill(int party_pos, int skill_pos, bool state) { heroAI->SetSkill(party_pos, skill_pos, state); }
-bool Py4GW::HeroAI_GetSkill(int party_pos, int skill_pos) { return heroAI->GetSkill(party_pos, skill_pos); }
-
-void Py4GW::HeroAI_FlagAIHero(int party_pos, float x, float y) { heroAI->FlagAIHero(party_pos, x, y); }
-void  Py4GW::HeroAI_UnFlagAIHero(int party_pos) { heroAI->UnFlagAIHero(party_pos); }
-float Py4GW::HeroAI_GetEnergy(int party_pos) { return heroAI->GetEnergy(party_pos); }
-float Py4GW::HeroAI_GetEnergyRegen(int party_pos) { return heroAI->GetEnergyRegen(party_pos); }
-int  Py4GW::HeroAI_GetPythonAgentID(int party_pos) { return heroAI->GetPythonAgentID(party_pos); }
-void Py4GW::HeroAI_Resign(int party_pos) { heroAI->Resign(party_pos); }
-void Py4GW::HeroAI_TakeQuest(uint32_t party_pos, uint32_t quest_id) { heroAI->TakeQuest(party_pos, quest_id); }
-void Py4GW::HeroAI_Identify_cmd(int party_pos) { heroAI->Identify_cmd(party_pos); }
-void Py4GW::HeroAI_Salvage_cmd(int party_pos) { heroAI->Salvage_cmd(party_pos); }
-
 
 PYBIND11_EMBEDDED_MODULE(Py4GW, m)
 {
     m.doc() = "Py4GW, Python Enabler Library for GuildWars"; // Optional module docstring
-
-	py::module_ HeroAI_module = m.def_submodule("HeroAI", "Submodule for Hero AI");
-
-    HeroAI_module.def("GetAIStatus", &Py4GW::HeroAI_IsAIEnabled, "Check if the AI is enabled");
-    HeroAI_module.def("SetAIStatus", &Py4GW::HeroAI_SetAIEnabled, "Enable or disable the AI");
-    HeroAI_module.def("GetMyPartyPos", &Py4GW::HeroAI_GetMyPartyPos, "Get the party position of the player");
-    
-    HeroAI_module.def("IsActive", &Py4GW::HeroAI_IsActive, "Check if the hero is active");
-    HeroAI_module.def("SetLooting", &Py4GW::HeroAI_SetLooting, "Enable or disable looting");
-    HeroAI_module.def("GetLooting", &Py4GW::HeroAI_GetLooting, "Check if looting is enabled");
-    HeroAI_module.def("SetFollowing", &Py4GW::HeroAI_SetFollowing, "Enable or disable following");
-    HeroAI_module.def("GetFollowing", &Py4GW::HeroAI_GetFollowing, "Check if following is enabled");
-    HeroAI_module.def("SetCombat", &Py4GW::HeroAI_SetCombat, "Enable or disable combat");
-    HeroAI_module.def("GetCombat", &Py4GW::HeroAI_GetCombat, "Check if combat is enabled");
-    HeroAI_module.def("SetCollision", &Py4GW::HeroAI_SetCollision, "Enable or disable collision");
-    HeroAI_module.def("GetCollision", &Py4GW::HeroAI_GetCollision, "Check if collision is enabled");
-    HeroAI_module.def("SetTargetting", &Py4GW::HeroAI_SetTargetting, "Enable or disable targetting");
-    HeroAI_module.def("GetTargetting", &Py4GW::HeroAI_GetTargetting, "Check if targetting is enabled");
-    HeroAI_module.def("SetSkill", &Py4GW::HeroAI_SetSkill, "Enable or disable a skill");
-    HeroAI_module.def("GetSkill", &Py4GW::HeroAI_GetSkill, "Check if a skill is enabled");
-
-    HeroAI_module.def("FlagAIHero", &Py4GW::HeroAI_FlagAIHero, "Flag a hero to move to a location");
-    HeroAI_module.def("UnFlagAIHero", &Py4GW::HeroAI_UnFlagAIHero, "Unflag a hero");
-    HeroAI_module.def("GetEnergy", &Py4GW::HeroAI_GetEnergy, "Get the energy of a hero");
-    HeroAI_module.def("GetEnergyRegen", &Py4GW::HeroAI_GetEnergyRegen, "Get the energy regen of a hero");
-    HeroAI_module.def("GetPythonAgentID", &Py4GW::HeroAI_GetPythonAgentID, "Get the Python agent ID of a hero");
-    HeroAI_module.def("Resign", &Py4GW::HeroAI_Resign, "Resign a hero");
-    HeroAI_module.def("TakeQuest", &Py4GW::HeroAI_TakeQuest, "Take a quest");
-    HeroAI_module.def("Identify_cmd", &Py4GW::HeroAI_Identify_cmd, "Identify all items in inventory");
-    HeroAI_module.def("Salvage_cmd", &Py4GW::HeroAI_Salvage_cmd, "Salvage all items in inventory");
     
     py::class_<Timer>(m, "Timer")
         .def(py::init<>())                               // Expose the constructor
@@ -1399,8 +1473,6 @@ PYBIND11_EMBEDDED_MODULE(Py4GW, m)
     py::module_ console = m.def_submodule("Console", "Submodule for console logging");
 
 	py::module_ game = m.def_submodule("Game", "Submodule for game functions");
-	game.def("SetFog", &SetFog, "Enable or disable fog");
-
 
     // Bind the MessageType enum inside the 'Console' submodule
     py::enum_<MessageType>(console, "MessageType")
@@ -1456,66 +1528,21 @@ PYBIND11_EMBEDDED_MODULE(PyKeystroke, m)
         .def("PushKeyCombo", &KeyHandler::push_key_combo, "Press and release a combination of keys using scan codes", pybind11::arg("keys"));
 }
 
+// pybind11 mouse module binding
+PYBIND11_EMBEDDED_MODULE(PyMouse, m)
+{
+	// Binding for the mouse handler
+	py::class_<MouseHandler>(m, "PyMouse")
+		.def(pybind11::init<>()) // Constructor
+		// Mouse movement
+		.def("MoveMouse", &MouseHandler::MoveMouse, "Move mouse to (x, y) relative to the client window", pybind11::arg("x"), pybind11::arg("y"))
+		// Mouse click functions
+		.def("Click", &MouseHandler::Click, "Click the mouse button at (x, y)", pybind11::arg("button") = 0, pybind11::arg("x") = 0, pybind11::arg("y") = 0)
+		.def("DoubleClick", &MouseHandler::DoubleClick, "Double click the mouse button at (x, y)", pybind11::arg("button") = 0, pybind11::arg("x") = 0, pybind11::arg("y") = 0)
+		// Mouse scroll
+		.def("Scroll", &MouseHandler::Scroll, "Scroll the mouse wheel", pybind11::arg("delta"), pybind11::arg("x") = 0, pybind11::arg("y") = 0)
+		// Mouse button press/release
+		.def("PressButton", &MouseHandler::PressButton, "Press a mouse button at (x, y)", pybind11::arg("button") = 0, pybind11::arg("x") = 0, pybind11::arg("y") = 0)
+		.def("ReleaseButton", &MouseHandler::ReleaseButton, "Release a mouse button at (x, y)", pybind11::arg("button") = 0, pybind11::arg("x") = 0, pybind11::arg("y") = 0);
+}
 
-class MouseHandler {
-public:
-    // Move the mouse to a specific position
-    void move_mouse(int x, int y) {
-        HWND hwnd = GetForegroundWindow(); // Get the current active window
-        if (hwnd == nullptr) return;
-
-        RECT windowRect;
-        if (!GetWindowRect(hwnd, &windowRect)) return;
-
-        int windowX = windowRect.left;
-        int windowY = windowRect.top;
-
-        // Adjust the position relative to the window's top-left corner
-        int absoluteX = windowX + x;
-        int absoluteY = windowY + y;
-
-        // Normalize coordinates for the absolute positioning
-        INPUT input = {};
-        input.type = INPUT_MOUSE;
-        input.mi.dx = absoluteX * (65535 / GetSystemMetrics(SM_CXSCREEN));
-        input.mi.dy = absoluteY * (65535 / GetSystemMetrics(SM_CYSCREEN));
-        input.mi.dwFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE;
-
-        SendInput(1, &input, sizeof(INPUT));
-    }
-
-    // Press a mouse button
-    void press_button(DWORD mouseEvent) {
-        INPUT input = {};
-        input.type = INPUT_MOUSE;
-        input.mi.dwFlags = mouseEvent;
-
-        SendInput(1, &input, sizeof(INPUT));
-    }
-
-    // Release a mouse button
-    void release_button(DWORD mouseEvent) {
-        INPUT input = {};
-        input.type = INPUT_MOUSE;
-        input.mi.dwFlags = mouseEvent;
-
-        SendInput(1, &input, sizeof(INPUT));
-    }
-
-    // Click (press and release) a mouse button
-    void click_button(DWORD mouseEvent) {
-        press_button(mouseEvent);
-        Sleep(50); // Mimic a human-like click
-        release_button(mouseEvent);
-    }
-
-    // Scroll the mouse wheel
-    void scroll_wheel(int delta) {
-        INPUT input = {};
-        input.type = INPUT_MOUSE;
-        input.mi.dwFlags = MOUSEEVENTF_WHEEL;
-        input.mi.mouseData = delta;
-
-        SendInput(1, &input, sizeof(INPUT));
-    }
-};
