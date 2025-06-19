@@ -17,6 +17,9 @@
 #include <GWCA/Managers/UIMgr.h>
 #include <GWCA/Managers/GameThreadMgr.h>
 #include <GWCA/Managers/RenderMgr.h>
+#include <GWCA/Logger/Logger.h>
+
+
 
 namespace {
     using namespace GW;
@@ -313,15 +316,16 @@ namespace {
         address = Scanner::FindAssertion("\\Code\\Engine\\Frame\\FrMsg.cpp", "frame", 0, -0x14);
         if (address)
             s_FrameArray = *(GW::Array<UI::Frame*>**)address;
-        
+
 
 
         address = Scanner::Find("\x81\x0D\xFF\xFF\xFF\xFF\x00\x00\x08\x00", "xx????xxxx", 2);
-        if(address && Scanner::IsValidPtr(*(uintptr_t*)address))
+        if (address && Scanner::IsValidPtr(*(uintptr_t*)address))
             WorldMapState_Addr = *(uintptr_t*)address;
 
 
-        address = Scanner::Find("\x83\xfb\x46\x73\x14", "xxxxx", -0x34);
+        //address = Scanner::Find("\x83\xfb\x46\x73\x14", "xxxxx", -0x34);
+        address = Scanner::Find("\x83\xfb\x47\x73\x14", "xxxxx", -0x34);
         if (address) {
             SendFrameUIMessageById_Func = (SendFrameUIMessageById_pt)address;
             SendFrameUIMessage_Func = (SendFrameUIMessage_pt)Scanner::FunctionFromNearCall(address + 0x67);
@@ -329,43 +333,44 @@ namespace {
 
 
         // @TODO: Grab the seeding context from memory, write this ourselves!
-        address = Scanner::Find("\x85\xc0\x74\x0d\x6a\xff\x50","xxxxxxx",0x7);
+        address = Scanner::Find("\x85\xc0\x74\x0d\x6a\xff\x50", "xxxxxxx", 0x7);
         CreateHashFromWchar_Func = (CreateHashFromWchar_pt)GW::Scanner::FunctionFromNearCall(address);
-        
+
 
 
         // @TODO: Grab the relationship array from memory, write this ourselves!
         address = Scanner::FindAssertion("\\Code\\Engine\\Controls\\CtlView.cpp", "pageId", 0, 0x19);
         GetChildFrameId_Func = (GetChildFrameId_pt)GW::Scanner::FunctionFromNearCall(address);
-        
+
 
         GetRootFrame_Func = (GetRootFrame_pt)Scanner::Find("\x05\xe0\xfe\xff\xff\xc3", "xxxxxx", -0x3c);
-        
 
-        SendUIMessage_Func = (SendUIMessage_pt)Scanner::ToFunctionStart(Scanner::Find("\xE8\x00\x00\x00\x00\x5D\xC3\x89\x45\x08\x5D\xE9", "x????xxxxxxx"));
-        
+
+        //SendUIMessage_Func = (SendUIMessage_pt)Scanner::ToFunctionStart(Scanner::Find("\xE8\x00\x00\x00\x00\x5D\xC3\x89\x45\x08\x5D\xE9", "x????xxxxxxx"));
+        SendUIMessage_Func = (SendUIMessage_pt)Scanner::ToFunctionStart(Scanner::Find("\xB9\x00\x00\x00\x00\xE8\x00\x00\x00\x00\x5D\xC3\x89\x45\x08", "x????x????xxxxx"));
+
 
         LoadSettings_Func = (LoadSettings_pt)Scanner::ToFunctionStart(Scanner::Find("\xE8\x00\x00\x00\x00\xFF\x75\x0C\xFF\x75\x08\x6A\x00", "x????xxxxxxxx"));
-        
+
 
         address = Scanner::FindAssertion("\\Code\\Gw\\Ui\\UiRoot.cpp", "!s_count++", 0, -0xD);
         if (Verify(address))
             ui_drawn_addr = *(uintptr_t*)address - 0x10;
-        
+
 
         address = Scanner::Find(
             "\x75\x19\x6A\x00\xC7\x05\x00\x00\x00\x00\x01\x00", "xxxxxx????xx", +6);
         if (address && Scanner::IsValidPtr(*(uintptr_t*)address))
-            shift_screen_addr = *(uintptr_t *)address;
-        
+            shift_screen_addr = *(uintptr_t*)address;
+
 
 
         address = Scanner::FindAssertion("\\Code\\Gw\\Pref\\PrApi.cpp", "location < arrsize(s_flushDelay)", 0, -0x12);
         if (address && Scanner::IsValidPtr(*(uintptr_t*)address))
             PreferencesInitialised_Addr = *(uintptr_t*)address;
-        
 
-        address = GW::Scanner::Find("\x8d\x85\x78\xf7\xff\xff\x50", "xxxxxxx",0x7);
+
+        address = GW::Scanner::Find("\x8d\x85\x78\xf7\xff\xff\x50", "xxxxxxx", 0x7);
         address = GW::Scanner::FunctionFromNearCall(address); // BuildLoginStruct
         if (address) {
             GetCommandLineFlag_Func = (GetFlagPreference_pt)GW::Scanner::FunctionFromNearCall(address + 0xf);
@@ -378,8 +383,8 @@ namespace {
         }
 
 
-        
-        address = Scanner::ToFunctionStart(GW::Scanner::FindAssertion("\\Code\\Gw\\Param\\Param.cpp","value - PARAM_VALUE_FIRST < (sizeof(s_values) / sizeof((s_values)[0]))",0, 0));
+
+        address = Scanner::ToFunctionStart(GW::Scanner::FindAssertion("\\Code\\Gw\\Param\\Param.cpp", "value - PARAM_VALUE_FIRST < (sizeof(s_values) / sizeof((s_values)[0]))", 0, 0));
         if (address) {
             GetCommandLineNumber_Func = (GetNumberPreference_pt)address;
             CommandLineNumber_Buffer = *(uint32_t**)(address + 0x29);
@@ -387,19 +392,19 @@ namespace {
         }
 
 
-        SetInGameShadowQuality_Func = (SetInGameShadowQuality_pt)Scanner::ToFunctionStart(Scanner::FindAssertion("AvShadow.cpp","No valid case for switch variable 'value'",0,0));
-        
+        SetInGameShadowQuality_Func = (SetInGameShadowQuality_pt)Scanner::ToFunctionStart(Scanner::FindAssertion("AvShadow.cpp", "No valid case for switch variable 'value'", 0, 0));
 
 
-        address = GW::Scanner::Find("\x83\xc4\x1c\x81\xfe\x20\x03\x00\x00","xxxxxxxxx", 0x31);
+
+        address = GW::Scanner::Find("\x83\xc4\x1c\x81\xfe\x20\x03\x00\x00", "xxxxxxxxx", 0x31);
         SetInGameUIScale_Func = (SetInGameUIScale_pt)GW::Scanner::FunctionFromNearCall(address);
-        
 
-        address = GW::Scanner::FindAssertion("\\Code\\Gw\\Ui\\Game\\CharCreate\\CharCreate.cpp", "msg.summaryBytes <= NET_CHARACTER_SUMMARY_MAX",0, -0x62);
+
+        address = GW::Scanner::FindAssertion("\\Code\\Gw\\Ui\\Game\\CharCreate\\CharCreate.cpp", "msg.summaryBytes <= NET_CHARACTER_SUMMARY_MAX", 0, -0x62);
         SetStringPreference_Func = (SetStringPreference_pt)GW::Scanner::FunctionFromNearCall(address);
-        
 
-        address = GW::Scanner::FindAssertion("\\Code\\Gw\\Ui\\Dialog\\DlgOptGr.cpp", "No valid case for switch variable 'quality'",0,0);
+
+        address = GW::Scanner::FindAssertion("\\Code\\Gw\\Ui\\Dialog\\DlgOptGr.cpp", "No valid case for switch variable 'quality'", 0, 0);
         if (address) {
             SetEnumPreference_Func = (SetEnumPreference_pt)GW::Scanner::FunctionFromNearCall(address - 0x84);
             SetFlagPreference_Func = (SetFlagPreference_pt)GW::Scanner::FunctionFromNearCall(address - 0x3b);
@@ -418,7 +423,7 @@ namespace {
             NumberPreferenceOptions_Addr = *(NumberPreferenceInfo**)address;
 
 
-        SetTooltip_Func = (SetTooltip_pt)Scanner::ToFunctionStart(GW::Scanner::FindAssertion("\\Code\\Engine\\Frame\\FrTip.cpp", "CMsg::Validate(id)",0,0));
+        SetTooltip_Func = (SetTooltip_pt)Scanner::ToFunctionStart(GW::Scanner::FindAssertion("\\Code\\Engine\\Frame\\FrTip.cpp", "CMsg::Validate(id)", 0, 0));
         if (SetTooltip_Func) {
             address = (uintptr_t)SetTooltip_Func;
             address += 0x9;
@@ -431,7 +436,7 @@ namespace {
         if (address && GW::Scanner::IsValidPtr(address, GW::ScannerSection::Section_TEXT))
             GameSettings_Addr = *(uintptr_t*)address;
 
-        
+
 
         // NB: 0x66 is the size of the window info array
         SetWindowVisible_Func = (SetWindowVisible_pt)Scanner::ToFunctionStart(Scanner::Find("\x8B\x75\x08\x83\xFE\x66\x7C\x19\x68", "xxxxxxxxx"));
@@ -451,7 +456,7 @@ namespace {
         SetVolume_Func = (SetVolume_pt)Scanner::ToFunctionStart(GW::Scanner::Find("\x8b\x75\x08\x83\xfe\x05\x72\x14\x68\x5b\x04\x00\x00\xba", "xxxxxxxxxxxxxx"));
 
         SetMasterVolume_Func = (SetMasterVolume_pt)Scanner::ToFunctionStart(Scanner::Find("\xd9\x45\x08\x83\xc6\x1c\x83\xef\x01\x75\xea\x5f\xdd\xd8\x5e\x5d", "xxxxxxxxxxxxxxxx"));
-        DrawOnCompass_Func = (DrawOnCompass_pt)Scanner::ToFunctionStart(Scanner::FindAssertion("\\Code\\Gw\\Char\\CharMsg.cpp", "knotCount <= arrsize(message.knotData)",0,0));
+        DrawOnCompass_Func = (DrawOnCompass_pt)Scanner::ToFunctionStart(Scanner::FindAssertion("\\Code\\Gw\\Char\\CharMsg.cpp", "knotCount <= arrsize(message.knotData)", 0, 0));
 
         CreateUIComponent_Func = (CreateUIComponent_pt)Scanner::ToFunctionStart(GW::Scanner::Find("\x33\xd2\x89\x45\x08\xb9\xac\x01\x00\x00", "xxxxxxxxxx"));
 
@@ -517,93 +522,94 @@ namespace {
         GWCA_INFO("[SCAN] SetGraphicsRendererValue_Func = %p", SetGraphicsRendererValue_Func);
         GWCA_INFO("[SCAN] SetGameRendererMode_Func = %p", SetGameRendererMode_Func);
         GWCA_INFO("[SCAN] GetGameRendererMetric_Func = %p", GetGameRendererMetric_Func);
-#ifdef _DEBUG
-        GWCA_ASSERT(s_FrameArray);
-        GWCA_ASSERT(WorldMapState_Addr);
-        GWCA_ASSERT(SendFrameUIMessageById_Func);
-        GWCA_ASSERT(SendFrameUIMessage_Func);
-        GWCA_ASSERT(CreateHashFromWchar_Func);
-        GWCA_ASSERT(GetChildFrameId_Func);
-        GWCA_ASSERT(GetRootFrame_Func);
-        GWCA_ASSERT(SendUIMessage_Func);
-        GWCA_ASSERT(LoadSettings_Func);
-        GWCA_ASSERT(ui_drawn_addr);
-        GWCA_ASSERT(shift_screen_addr);
-        GWCA_ASSERT(PreferencesInitialised_Addr);
-        GWCA_ASSERT(GetCommandLineFlag_Func);
-        GWCA_ASSERT(GetCommandLineString_Func);
-        GWCA_ASSERT(GetStringPreference_Func);
-        GWCA_ASSERT(GetFlagPreference_Func);
-        GWCA_ASSERT(GetEnumPreference_Func);
-        GWCA_ASSERT(GetNumberPreference_Func);
-        GWCA_ASSERT(GetCommandLineNumber_Func);
-        GWCA_ASSERT(CommandLineNumber_Buffer);
-        GWCA_ASSERT(SetInGameShadowQuality_Func);
-        GWCA_ASSERT(SetInGameUIScale_Func);
-        GWCA_ASSERT(SetStringPreference_Func);
-        GWCA_ASSERT(SetEnumPreference_Func);
-        GWCA_ASSERT(SetFlagPreference_Func);
-        GWCA_ASSERT(SetNumberPreference_Func);
-        GWCA_ASSERT(SetInGameStaticPreference_Func);
-        GWCA_ASSERT(TriggerTerrainRerender_Func);
-        GWCA_ASSERT(EnumPreferenceOptions_Addr);
-        GWCA_ASSERT(NumberPreferenceOptions_Addr);
-        GWCA_ASSERT(SetTooltip_Func);
-        GWCA_ASSERT(CurrentTooltipPtr);
-        GWCA_ASSERT(GameSettings_Addr);
-        GWCA_ASSERT(SetWindowVisible_Func);
-        GWCA_ASSERT(SetWindowPosition_Func);
-        GWCA_ASSERT(window_positions_array);
 
-        GWCA_ASSERT(GetStringPreference_Func);
-        GWCA_ASSERT(GetEnumPreference_Func);
-        GWCA_ASSERT(GetNumberPreference_Func);
-        GWCA_ASSERT(GetFlagPreference_Func);
-        GWCA_ASSERT(SetStringPreference_Func);
-        GWCA_ASSERT(SetEnumPreference_Func);
-        GWCA_ASSERT(SetNumberPreference_Func);
-        GWCA_ASSERT(SetFlagPreference_Func);
-        GWCA_ASSERT(WorldMapState_Addr);
-        GWCA_ASSERT(SendFrameUIMessage_Func);
-        GWCA_ASSERT(SendUIMessage_Func);
-        GWCA_ASSERT(LoadSettings_Func);
-        GWCA_ASSERT(ui_drawn_addr);
-        GWCA_ASSERT(shift_screen_addr);
-        GWCA_ASSERT(SetTooltip_Func);
-        GWCA_ASSERT(CurrentTooltipPtr);
-        GWCA_ASSERT(GameSettings_Addr);
-        GWCA_ASSERT(SetWindowVisible_Func);
-        GWCA_ASSERT(SetWindowPosition_Func);
-        GWCA_ASSERT(window_positions_array);
-        GWCA_ASSERT(ValidateAsyncDecodeStr);
-        GWCA_ASSERT(AsyncDecodeStringPtr);
-        GWCA_ASSERT(SetVolume_Func);
-        GWCA_ASSERT(SetMasterVolume_Func);
-        GWCA_ASSERT(DrawOnCompass_Func);
-        GWCA_ASSERT(CreateUIComponent_Func);
-        GWCA_ASSERT(EnumPreferenceOptions_Addr);
-        GWCA_ASSERT(NumberPreferenceOptions_Addr);
-        GWCA_ASSERT(SetInGameStaticPreference_Func);
-        GWCA_ASSERT(SetInGameUIScale_Func);
-        GWCA_ASSERT(PreferencesInitialised_Addr);
-        GWCA_ASSERT(GetRootFrame_Func);
+        Logger::AssertAddress("s_FrameArray", (uintptr_t)s_FrameArray);
+        Logger::AssertAddress("WorldMapState_Addr", (uintptr_t)WorldMapState_Addr);
+        Logger::AssertAddress("SendFrameUIMessageById_Func", (uintptr_t)SendFrameUIMessageById_Func);
+        Logger::AssertAddress("SendFrameUIMessage_Func", (uintptr_t)SendFrameUIMessage_Func);
+        Logger::AssertAddress("CreateHashFromWchar_Func", (uintptr_t)CreateHashFromWchar_Func);
+        Logger::AssertAddress("GetChildFrameId_Func", (uintptr_t)GetChildFrameId_Func);
+        Logger::AssertAddress("GetRootFrame_Func", (uintptr_t)GetRootFrame_Func);
+        Logger::AssertAddress("SendUIMessage_Func", (uintptr_t)SendUIMessage_Func);
+        Logger::AssertAddress("LoadSettings_Func", (uintptr_t)LoadSettings_Func);
+        Logger::AssertAddress("ui_drawn_addr", (uintptr_t)ui_drawn_addr);
+        Logger::AssertAddress("shift_screen_addr", (uintptr_t)shift_screen_addr);
+        Logger::AssertAddress("PreferencesInitialised_Addr", (uintptr_t)PreferencesInitialised_Addr);
+        Logger::AssertAddress("GetCommandLineFlag_Func", (uintptr_t)GetCommandLineFlag_Func);
+        Logger::AssertAddress("GetCommandLineString_Func", (uintptr_t)GetCommandLineString_Func);
+        Logger::AssertAddress("GetStringPreference_Func", (uintptr_t)GetStringPreference_Func);
+        Logger::AssertAddress("GetFlagPreference_Func", (uintptr_t)GetFlagPreference_Func);
+        Logger::AssertAddress("GetEnumPreference_Func", (uintptr_t)GetEnumPreference_Func);
+        Logger::AssertAddress("GetNumberPreference_Func", (uintptr_t)GetNumberPreference_Func);
+        Logger::AssertAddress("GetCommandLineNumber_Func", (uintptr_t)GetCommandLineNumber_Func);
+        Logger::AssertAddress("CommandLineNumber_Buffer", (uintptr_t)CommandLineNumber_Buffer);
+        Logger::AssertAddress("SetInGameShadowQuality_Func", (uintptr_t)SetInGameShadowQuality_Func);
+        Logger::AssertAddress("SetInGameUIScale_Func", (uintptr_t)SetInGameUIScale_Func);
+        Logger::AssertAddress("SetStringPreference_Func", (uintptr_t)SetStringPreference_Func);
+        Logger::AssertAddress("SetEnumPreference_Func", (uintptr_t)SetEnumPreference_Func);
+        Logger::AssertAddress("SetFlagPreference_Func", (uintptr_t)SetFlagPreference_Func);
+        Logger::AssertAddress("SetNumberPreference_Func", (uintptr_t)SetNumberPreference_Func);
+        Logger::AssertAddress("SetInGameStaticPreference_Func", (uintptr_t)SetInGameStaticPreference_Func);
+        Logger::AssertAddress("TriggerTerrainRerender_Func", (uintptr_t)TriggerTerrainRerender_Func);
+        Logger::AssertAddress("EnumPreferenceOptions_Addr", (uintptr_t)EnumPreferenceOptions_Addr);
+        Logger::AssertAddress("NumberPreferenceOptions_Addr", (uintptr_t)NumberPreferenceOptions_Addr);
+        Logger::AssertAddress("SetTooltip_Func", (uintptr_t)SetTooltip_Func);
+        Logger::AssertAddress("CurrentTooltipPtr", (uintptr_t)CurrentTooltipPtr);
+        Logger::AssertAddress("GameSettings_Addr", (uintptr_t)GameSettings_Addr);
+        Logger::AssertAddress("SetWindowVisible_Func", (uintptr_t)SetWindowVisible_Func);
+        Logger::AssertAddress("SetWindowPosition_Func", (uintptr_t)SetWindowPosition_Func);
+        Logger::AssertAddress("window_positions_array", (uintptr_t)window_positions_array);
 
-        GWCA_ASSERT(GetGraphicsRendererValue_Func);
-        GWCA_ASSERT(SetGraphicsRendererValue_Func);
-        GWCA_ASSERT(SetGameRendererMode_Func);
-        GWCA_ASSERT(GetGameRendererMetric_Func);
-#endif
+        Logger::AssertAddress("GetStringPreference_Func", (uintptr_t)GetStringPreference_Func);
+        Logger::AssertAddress("GetEnumPreference_Func", (uintptr_t)GetEnumPreference_Func);
+        Logger::AssertAddress("GetNumberPreference_Func", (uintptr_t)GetNumberPreference_Func);
+        Logger::AssertAddress("GetFlagPreference_Func", (uintptr_t)GetFlagPreference_Func);
+        Logger::AssertAddress("SetStringPreference_Func", (uintptr_t)SetStringPreference_Func);
+        Logger::AssertAddress("SetEnumPreference_Func", (uintptr_t)SetEnumPreference_Func);
+        Logger::AssertAddress("SetNumberPreference_Func", (uintptr_t)SetNumberPreference_Func);
+        Logger::AssertAddress("SetFlagPreference_Func", (uintptr_t)SetFlagPreference_Func);
+        Logger::AssertAddress("WorldMapState_Addr", (uintptr_t)WorldMapState_Addr);
+        Logger::AssertAddress("SendFrameUIMessage_Func", (uintptr_t)SendFrameUIMessage_Func);
+        Logger::AssertAddress("SendUIMessage_Func", (uintptr_t)SendUIMessage_Func);
+        Logger::AssertAddress("LoadSettings_Func", (uintptr_t)LoadSettings_Func);
+        Logger::AssertAddress("ui_drawn_addr", (uintptr_t)ui_drawn_addr);
+        Logger::AssertAddress("shift_screen_addr", (uintptr_t)shift_screen_addr);
+        Logger::AssertAddress("SetTooltip_Func", (uintptr_t)SetTooltip_Func);
+        Logger::AssertAddress("CurrentTooltipPtr", (uintptr_t)CurrentTooltipPtr);
+        Logger::AssertAddress("GameSettings_Addr", (uintptr_t)GameSettings_Addr);
+        Logger::AssertAddress("SetWindowVisible_Func", (uintptr_t)SetWindowVisible_Func);
+        Logger::AssertAddress("SetWindowPosition_Func", (uintptr_t)SetWindowPosition_Func);
+        Logger::AssertAddress("window_positions_array", (uintptr_t)window_positions_array);
+        Logger::AssertAddress("ValidateAsyncDecodeStr", (uintptr_t)ValidateAsyncDecodeStr);
+        Logger::AssertAddress("AsyncDecodeStringPtr", (uintptr_t)AsyncDecodeStringPtr);
+        Logger::AssertAddress("SetVolume_Func", (uintptr_t)SetVolume_Func);
+        Logger::AssertAddress("SetMasterVolume_Func", (uintptr_t)SetMasterVolume_Func);
+        Logger::AssertAddress("DrawOnCompass_Func", (uintptr_t)DrawOnCompass_Func);
+        Logger::AssertAddress("CreateUIComponent_Func", (uintptr_t)CreateUIComponent_Func);
+        Logger::AssertAddress("EnumPreferenceOptions_Addr", (uintptr_t)EnumPreferenceOptions_Addr);
+        Logger::AssertAddress("NumberPreferenceOptions_Addr", (uintptr_t)NumberPreferenceOptions_Addr);
+        Logger::AssertAddress("SetInGameStaticPreference_Func", (uintptr_t)SetInGameStaticPreference_Func);
+        Logger::AssertAddress("SetInGameUIScale_Func", (uintptr_t)SetInGameUIScale_Func);
+        Logger::AssertAddress("PreferencesInitialised_Addr", (uintptr_t)PreferencesInitialised_Addr);
+        Logger::AssertAddress("GetRootFrame_Func", (uintptr_t)GetRootFrame_Func);
 
-        if(SendUIMessage_Func)
-            HookBase::CreateHook((void**)&SendUIMessage_Func, OnSendUIMessage, (void **)&RetSendUIMessage);
+        Logger::AssertAddress("GetGraphicsRendererValue_Func", (uintptr_t)GetGraphicsRendererValue_Func);
+        Logger::AssertAddress("SetGraphicsRendererValue_Func", (uintptr_t)SetGraphicsRendererValue_Func);
+        Logger::AssertAddress("SetGameRendererMode_Func", (uintptr_t)SetGameRendererMode_Func);
+        Logger::AssertAddress("GetGameRendererMetric_Func", (uintptr_t)GetGameRendererMetric_Func);
+
+
+        if (SendUIMessage_Func) 
+        HookBase::CreateHook((void**)&SendUIMessage_Func, OnSendUIMessage, (void**)&RetSendUIMessage);
+        
         if(CreateUIComponent_Func)
-            HookBase::CreateHook((void**)&CreateUIComponent_Func, OnCreateUIComponent, (void**)&CreateUIComponent_Ret);
+            Logger::AssertHook("CreateUIComponent_Func", HookBase::CreateHook((void**)&CreateUIComponent_Func, OnCreateUIComponent, (void**)&CreateUIComponent_Ret));
         if(SendFrameUIMessage_Func)
-            HookBase::CreateHook((void**)&SendFrameUIMessage_Func, OnSendFrameUIMessage, (void**)&SendFrameUIMessage_Ret);
+            Logger::AssertHook("SendFrameUIMessage_Func", HookBase::CreateHook((void**)&SendFrameUIMessage_Func, OnSendFrameUIMessage, (void**)&SendFrameUIMessage_Ret));
         if(SendFrameUIMessageById_Func)
-            HookBase::CreateHook((void**)&SendFrameUIMessageById_Func, OnSendFrameUIMessageById, (void**)&SendFrameUIMessageById_Ret);
+            Logger::AssertHook("SendFrameUIMessageById_Func", HookBase::CreateHook((void**)&SendFrameUIMessageById_Func, OnSendFrameUIMessageById, (void**)&SendFrameUIMessageById_Ret));
         if(DrawOnCompass_Func)
-            HookBase::CreateHook((void**)&DrawOnCompass_Func, OnDrawOnCompass, (void**)&DrawOnCompass_Ret);
+            Logger::AssertHook("DrawOnCompass_Func", HookBase::CreateHook((void**)&DrawOnCompass_Func, OnDrawOnCompass, (void**)&DrawOnCompass_Ret));
     }
 
     void EnableHooks() {

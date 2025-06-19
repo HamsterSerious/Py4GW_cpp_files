@@ -840,7 +840,7 @@ extern Timer salvage_timer;
 
 
 //manually added libs
-#include "Logger.h"
+#include <GWCA/Logger/Logger.h>
 #include <commdlg.h>
 #include "py_overlay.h"
 #include "py_ui.h"

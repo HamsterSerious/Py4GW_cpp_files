@@ -1328,6 +1328,7 @@ bool check_login_screen = true;
 
 
 void Py4GW::Draw(IDirect3DDevice9* device) {
+
     if (!g_d3d_device)
         g_d3d_device = device;
 
@@ -1481,7 +1482,7 @@ void Py4GW::Draw(IDirect3DDevice9* device) {
 	if (script_state2 == ScriptState::Running && !script_content2.empty()) {
 		ExecutePythonScript2();
 	}
-
+    
 }
 
 

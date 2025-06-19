@@ -6,6 +6,9 @@
 #include <GWCA/Managers/Module.h>
 #include <GWCA/Managers/GameThreadMgr.h>
 #include <GWCA/Utilities/Hooker.h>
+#include <mutex>
+#include <GWCA/Logger/Logger.h>
+
 
 namespace {
     using namespace GW;
@@ -68,12 +71,13 @@ namespace {
         uintptr_t address = Scanner::Find("\x8b\x75\x08\xdd\xd9\xf6\xc4\x41","xxxxxxxx",-0x20);
         LeaveGameThread_Func = (Render_t)address;
 
+		Logger::AssertAddress("LeaveGameThread_Func", (uintptr_t)LeaveGameThread_Func);
 
-#ifdef _DEBUG
-        GWCA_ASSERT(LeaveGameThread_Func);
-#endif
 
-        GW::HookBase::CreateHook((void**)&LeaveGameThread_Func, OnLeaveGameThread, (void **)&LeaveGameThread_Ret);
+        int success = GW::HookBase::CreateHook((void**)&LeaveGameThread_Func, OnLeaveGameThread, (void **)&LeaveGameThread_Ret);
+		Logger::Instance().AssertHook("LeaveGameThread_Func", success);
+
+
         /*
                 uintptr_t address = Scanner::Find("\x2B\xCE\x8B\x15\x00\x00\x00\x00\xF7\xD9\x1B\xC9", "xxxx????xxxx", +4);
         GWCA_INFO("[SCAN] BasePointerLocation = %p", (void *)address);

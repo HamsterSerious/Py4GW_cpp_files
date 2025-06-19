@@ -42,6 +42,9 @@
 #include <GWCA/Managers/EventMgr.h>
 #include <GWCA/Managers/QuestMgr.h>
 #include <thread>
+#include <GWCA/Logger/Logger.h>
+
+
 
 namespace {
     std::thread terminating_thread;
@@ -50,6 +53,7 @@ namespace {
 
     }
 }
+
 
 namespace GW
 {
@@ -61,47 +65,86 @@ namespace GW
 
     bool Initialize()
     {
+        Logger::Instance().SetLogFile("Py4GW_injection_log.txt");
+        Logger::Instance().LogInfo("Attempting to initialize GWCA");
         if (_initialized) return true;
+		Logger::Instance().LogInfo("Initializing GWCA GamethreadModule");
         modules.push_back(&GameThreadModule);
+		Logger::Instance().LogInfo("Initializing GWCA RenderModule");
         modules.push_back(&RenderModule);
+		Logger::Instance().LogInfo("Initializing GWCA UIModule");
         modules.push_back(&UIModule);
+		Logger::Instance().LogInfo("Initializing GWCA CameraModule");
         modules.push_back(&CameraModule);
+		Logger::Instance().LogInfo("Initializing GWCA AgentModule");
         modules.push_back(&AgentModule);
+		Logger::Instance().LogInfo("Initializing GWCA MapModule");
         modules.push_back(&MapModule);
+		Logger::Instance().LogInfo("Initializing GWCA ChatModule");
         modules.push_back(&ChatModule);
+		Logger::Instance().LogInfo("Initializing GWCA ItemModule");
         modules.push_back(&ItemModule);
+		Logger::Instance().LogInfo("Initializing GWCA StoCModule");
         modules.push_back(&StoCModule);
+		Logger::Instance().LogInfo("Initializing GWCA GuildModule");
         modules.push_back(&GuildModule);
+		Logger::Instance().LogInfo("Initializing GWCA PartyModule");
         modules.push_back(&PartyModule);
+		Logger::Instance().LogInfo("Initializing GWCA TradeModule");
         modules.push_back(&TradeModule);
+		Logger::Instance().LogInfo("Initializing GWCA EffectModule");
         modules.push_back(&EffectModule);
+		Logger::Instance().LogInfo("Initializing GWCA PlayerModule");
         modules.push_back(&PlayerModule);
+		Logger::Instance().LogInfo("Initializing GWCA MerchantModule");
         modules.push_back(&MerchantModule);
+		Logger::Instance().LogInfo("Initializing GWCA SkillbarModule");
         modules.push_back(&SkillbarModule);
+		Logger::Instance().LogInfo("Initializing GWCA FriendListModule");
         modules.push_back(&FriendListModule);
+		Logger::Instance().LogInfo("Initializing GWCA EventMgrModule");
         modules.push_back(&EventMgrModule);
+		Logger::Instance().LogInfo("Initializing GWCA QuestModule");
         modules.push_back(&QuestModule);
+        
 
+		Logger::Instance().LogInfo("Initializing MemoryMgr");
         if (!MemoryMgr::Scan())
             return false;
-
+        
         // We could get it from thread ctx
         uintptr_t address = Scanner::Find("\x50\x6A\x0F\x6A\x00\xFF\x35", "xxxxxxx", +7);
 
         if (Verify(address))
             base_ptr = *(uintptr_t *)address;
         GWCA_INFO("[SCAN] base_ptr = %p, %p", (void *)base_ptr);
+		Logger::AssertAddress("base_ptr", base_ptr);
+		// Initialize the hook system
 
+		Logger::Instance().LogInfo("Initializing HookBase");
         HookBase::Initialize();
+        
 
         address = Scanner::FindAssertion("\\Code\\Gw\\Ui\\Game\\GmContext.cpp", "!s_context",0, -0x9);
         if (address && Scanner::IsValidPtr(*(uintptr_t*)address, ScannerSection::Section_DATA))
             GameplayContext_addr = *(uintptr_t*)address;
 
+        if (!GameplayContext_addr) {
+            std::ostringstream oss;
+            oss << "GwGetTransform_func  = " << (void*)GameplayContext_addr;
+            Logger::Instance().LogError(oss.str());
+        }
+
 
         address = Scanner::FindAssertion("UiPregame.cpp", "!s_scene", 0,0x34);
         if (address && Scanner::IsValidPtr(*(uintptr_t*)address, ScannerSection::Section_DATA))
             PreGameContext_addr = *(uintptr_t*)address;
+
+        if (!PreGameContext_addr) {
+            std::ostringstream oss;
+            oss << "GwGetTransform_func  = " << (void*)PreGameContext_addr;
+            Logger::Instance().LogError(oss.str());
+        }
 
         GWCA_INFO("[SCAN] GameplayContext_addr = %p", GameplayContext_addr);
         GWCA_INFO("[SCAN] PreGameContext_addr = %p", PreGameContext_addr);
@@ -110,7 +153,11 @@ namespace GW
         GWCA_ASSERT(GameplayContext_addr);
         GWCA_ASSERT(PreGameContext_addr);
 #endif
+		Logger::AssertAddress("GameplayContext_addr", GameplayContext_addr);
+		Logger::AssertAddress("PreGameContext_addr", PreGameContext_addr);
 
+
+		Logger::Instance().LogInfo("Initializing MemoryPatcher");
         for (const Module* module : modules) {
             GWCA_INFO("\nInitializing module '%s'\n", module->name);
             if (module->init_module)
@@ -118,6 +165,7 @@ namespace GW
         }
         _initialized = true;
 
+		Logger::Instance().LogInfo("Enabling hooks");
         EnableHooks();
         return true;
     }

@@ -42,8 +42,10 @@ private:
     // Initialization helpers
     bool InitializeGWCA();
 	bool InitializePy4GW();
+public:
     bool InitializeImGui(IDirect3DDevice9* device);
 
+private:
     // State variables
     
     bool running;

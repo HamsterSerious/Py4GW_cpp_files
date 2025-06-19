@@ -11,6 +11,7 @@
 #include <GWCA/Managers/UIMgr.h>
 #include <GWCA/Context/GameContext.h>
 #include <GWCA/Context/TradeContext.h>
+#include <GWCA/Logger/Logger.h>
 
 namespace {
     uint32_t GetTradeState() {

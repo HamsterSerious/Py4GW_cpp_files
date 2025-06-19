@@ -17,6 +17,7 @@
 #include <GWCA/Managers/AgentMgr.h>
 #include <GWCA/Managers/PlayerMgr.h>
 #include <GWCA/Managers/SkillbarMgr.h>
+#include <GWCA/Logger/Logger.h>
 
 namespace {
     using namespace GW;
@@ -58,6 +59,11 @@ namespace {
         GWCA_INFO("[SCAN] RemoveActiveTitle_Func = %p", RemoveActiveTitle_Func);
         GWCA_INFO("[SCAN] SetActiveTitle_Func = %p", SetActiveTitle_Func);
         GWCA_INFO("[SCAN] DepositFaction_Func = %p", DepositFaction_Func);
+
+		Logger::AssertAddress("RemoveActiveTitle_Func", (uintptr_t)RemoveActiveTitle_Func);
+		Logger::AssertAddress("SetActiveTitle_Func", (uintptr_t)SetActiveTitle_Func);
+		Logger::AssertAddress("DepositFaction_Func", (uintptr_t)DepositFaction_Func);
+		Logger::AssertAddress("title_data", (uintptr_t)title_data);
 
 #ifdef _DEBUG
         GWCA_ASSERT(RemoveActiveTitle_Func);

@@ -1,4 +1,4 @@
-#include "Logger.h"
+#include <GWCA/Logger/Logger.h>
 #include <ctime>
 #include <iomanip>
 #include <sstream>
@@ -24,6 +24,26 @@ bool Logger::LogWarning(const std::string& message) {
 
 bool Logger::LogError(const std::string& message) {
     return WriteLog("ERROR", message);
+}
+
+bool Logger::AssertAddress(const std::string& name, uintptr_t address) {
+    if (!address) {
+        std::ostringstream oss;
+        oss << "Address for " << name << " is null.";
+        Logger::Instance().LogError(oss.str());
+        return false;
+    }
+    return true;
+}
+
+bool Logger::AssertHook(const std::string& name, int status) {
+    if (status != 0) { // MH_OK is 0, any other value means failure
+        std::ostringstream oss;
+        oss << "Failed to hook " << name << ". MH_STATUS = " << status;
+        Logger::Instance().LogError(oss.str());
+        return false;
+    }
+    return true;
 }
 
 bool Logger::WriteLog(const std::string& level, const std::string& message) {

@@ -15,6 +15,7 @@
 #include <GWCA/Managers/Module.h>
 #include <GWCA/Managers/AgentMgr.h>
 #include <GWCA/Managers/EffectMgr.h>
+#include <GWCA/Logger/Logger.h>
 
 namespace {
     using namespace GW;
@@ -49,8 +50,12 @@ namespace {
         GWCA_ASSERT(PostProcessEffect_Func);
         GWCA_ASSERT(DropBuff_Func);
 #endif
+		Logger::AssertAddress("PostProcessEffect_Func", (uintptr_t)PostProcessEffect_Func);
+		Logger::AssertAddress("DropBuff_Func", (uintptr_t)DropBuff_Func);
 
-        HookBase::CreateHook((void**)&PostProcessEffect_Func, OnPostProcessEffect, (void**)&RetPostProcessEffect);
+
+        int success = HookBase::CreateHook((void**)&PostProcessEffect_Func, OnPostProcessEffect, (void**)&RetPostProcessEffect);
+		Logger::AssertHook("PostProcessEffect_Func", success);
     }
 
     void DisableHooks() {

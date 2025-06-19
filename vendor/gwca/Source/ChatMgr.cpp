@@ -11,6 +11,7 @@
 #include <GWCA/Utilities/MemoryPatcher.h>
 #include <GWCA/Managers/GameThreadMgr.h>
 #include <iomanip> 
+#include <GWCA/Logger/Logger.h>
 
 #define COLOR_ARGB(a, r, g, b) (GW::Chat::Color)((((a) & 0xff) << 24) | (((r) & 0xff) << 16) | (((g) & 0xff) << 8) | ((b) & 0xff))
 #define COLOR_RGB(r, g, b) COLOR_ARGB(0xff, r, g, b)
@@ -165,6 +166,11 @@ namespace {
 
     // Override the default in-game chat message timestamp logic
     void __cdecl OnUICallback_ChatLogLine(GW::UI::InteractionMessage* message, void* wParam, void* lParam) {
+		if (!message || !wParam || !lParam) {
+            Logger::Instance().SetLogFile("Py4GW_injection_log.txt");
+			Logger::Instance().LogError("OnUICallback_ChatLogLine called with null parameters.");
+			return;
+		}
         GW::Hook::EnterHook();
         switch (static_cast<uint32_t>(message->message_id)) {
         case 0x49: {
@@ -361,29 +367,40 @@ namespace {
         GWCA_INFO("[SCAN] UICallback_ChatLogLine_Func = %p", UICallback_ChatLogLine_Func);
         
 
-#ifdef _DEBUG
-        GWCA_ASSERT(PrintChatMessage_Func);
-        GWCA_ASSERT(UICallback_ChatLogLine_Func);
-        GWCA_ASSERT(block_chat_timestamps.IsValid());
-        GWCA_ASSERT(GetSenderColor_Func);
-        GWCA_ASSERT(GetMessageColor_Func);
-        GWCA_ASSERT(SendChat_Func);
-        GWCA_ASSERT(StartWhisper_Func);
-        GWCA_ASSERT(RecvWhisper_Func);
-        GWCA_ASSERT(AddToChatLog_Func);
-        GWCA_ASSERT(ChatBuffer_Addr);
-        GWCA_ASSERT(IsTyping_FrameId);
-        GWCA_ASSERT(UICallback_AssignEditableText_Func);
-#endif
-        HookBase::CreateHook((void**)&UICallback_ChatLogLine_Func, OnUICallback_ChatLogLine, (void**)&UICallback_ChatLogLine_Ret);
-        HookBase::CreateHook((void**)&StartWhisper_Func, OnStartWhisper_Func, (void**)& StartWhisper_Ret);
-        HookBase::CreateHook((void**)&GetSenderColor_Func, OnGetSenderColor_Func, (void **)&GetSenderColor_Ret);
-        HookBase::CreateHook((void**)&GetMessageColor_Func, OnGetMessageColor_Func, (void **)&GetMessageColor_Ret);
-        HookBase::CreateHook((void**)&SendChat_Func, OnSendChat_Func, (void **)&SendChat_Ret);
-        HookBase::CreateHook((void**)&RecvWhisper_Func, OnRecvWhisper_Func, (void **)&RecvWhisper_Ret);
-        HookBase::CreateHook((void**)&AddToChatLog_Func, OnAddToChatLog_Func, (void**)&AddToChatLog_Ret);
-        HookBase::CreateHook((void**)&UICallback_AssignEditableText_Func, OnUICallback_AssignEditableText, (void**)& UICallback_AssignEditableText_Ret);
-        HookBase::CreateHook((void**)&PrintChatMessage_Func, OnPrintChatMessage_Func, (void**)&PrintChatMessage_Ret);
+		Logger::AssertAddress("PrintChatMessage_Func", (uintptr_t)PrintChatMessage_Func);
+		Logger::AssertAddress("UICallback_ChatLogLine_Func", (uintptr_t)UICallback_ChatLogLine_Func);
+		if (!block_chat_timestamps.IsValid()) {
+			Logger::Instance().LogError("Failed to patch chat timestamps, address not found.");
+		}
+		Logger::AssertAddress("GetSenderColor_Func", (uintptr_t)GetSenderColor_Func);
+		Logger::AssertAddress("GetMessageColor_Func", (uintptr_t)GetMessageColor_Func);
+		Logger::AssertAddress("SendChat_Func", (uintptr_t)SendChat_Func);
+		Logger::AssertAddress("StartWhisper_Func", (uintptr_t)StartWhisper_Func);
+		Logger::AssertAddress("RecvWhisper_Func", (uintptr_t)RecvWhisper_Func);
+		Logger::AssertAddress("AddToChatLog_Func", (uintptr_t)AddToChatLog_Func);
+		Logger::AssertAddress("ChatBuffer_Addr", (uintptr_t)ChatBuffer_Addr);
+		Logger::AssertAddress("IsTyping_FrameId", (uintptr_t)IsTyping_FrameId);
+		Logger::AssertAddress("UICallback_AssignEditableText_Func", (uintptr_t)UICallback_AssignEditableText_Func);
+
+
+        //int success = HookBase::CreateHook((void**)&UICallback_ChatLogLine_Func, OnUICallback_ChatLogLine, (void**)&UICallback_ChatLogLine_Ret);
+		//Logger::AssertHook("UICallback_ChatLogLine_Func", success);
+        int success = HookBase::CreateHook((void**)&StartWhisper_Func, OnStartWhisper_Func, (void**)& StartWhisper_Ret);
+		Logger::AssertHook("StartWhisper_Func", success);
+        success = HookBase::CreateHook((void**)&GetSenderColor_Func, OnGetSenderColor_Func, (void **)&GetSenderColor_Ret);
+		Logger::AssertHook("GetSenderColor_Func", success);
+        success = HookBase::CreateHook((void**)&GetMessageColor_Func, OnGetMessageColor_Func, (void **)&GetMessageColor_Ret);
+		Logger::AssertHook("GetMessageColor_Func", success);
+        success = HookBase::CreateHook((void**)&SendChat_Func, OnSendChat_Func, (void **)&SendChat_Ret);
+		Logger::AssertHook("SendChat_Func", success);
+        success = HookBase::CreateHook((void**)&RecvWhisper_Func, OnRecvWhisper_Func, (void **)&RecvWhisper_Ret);
+		Logger::AssertHook("RecvWhisper_Func", success);
+        success = HookBase::CreateHook((void**)&AddToChatLog_Func, OnAddToChatLog_Func, (void**)&AddToChatLog_Ret);
+		Logger::AssertHook("AddToChatLog_Func", success);
+        success = HookBase::CreateHook((void**)&UICallback_AssignEditableText_Func, OnUICallback_AssignEditableText, (void**)& UICallback_AssignEditableText_Ret);
+		Logger::AssertHook("UICallback_AssignEditableText_Func", success);
+        success = HookBase::CreateHook((void**)&PrintChatMessage_Func, OnPrintChatMessage_Func, (void**)&PrintChatMessage_Ret);
+		Logger::AssertHook("PrintChatMessage_Func", success);
 
         for (size_t i = 0; i < (size_t)GW::Chat::Channel::CHANNEL_COUNT && GetSenderColor_Ret && GetMessageColor_Ret; i++) {
             const auto chan = (GW::Chat::Channel)i;

@@ -51,30 +51,50 @@ bool DLLMain::Initialize() {
 
     Logger::Instance().SetLogFile("Py4GW_injection_log.txt");
 
+    if (!initialized) Logger::Instance().LogInfo("Attempting to initialize DLL...");
     // Initialize GWCA
     if (!InitializeGWCA()) {
         Logger::Instance().LogError("Failed to initialize GWCA");
         return false;
     }
+    else
+	{
+        if (!initialized) Logger::Instance().LogInfo("GWCA initialized successfully.");
+	}
 
     // Get Guild Wars window handle
+    if (!initialized) Logger::Instance().LogInfo("Attempting to get GW window handle...");
     gw_window_handle = GW::MemoryMgr::GetGWWindowHandle();
     if (!gw_window_handle) {
 		Logger::Instance().LogError("Failed to get GW window handle");
         return false;
     }
+    else
+    {
+        if (!initialized) Logger::Instance().LogInfo("GW window handle obtained successfully.");
+    }
 
     // Attach render hook
+    if (!initialized) Logger::Instance().LogInfo("Attempting to attach render hook...");
     if (!AttachRenderHook()) {
         Logger::Instance().LogError("Failed to attach render hook");
         return false;
     }
+    else
+	{
+        if (!initialized) Logger::Instance().LogInfo("Render hook attached successfully.");
+	}
 
     // Attach window procedure hook
+    if (!initialized) Logger::Instance().LogInfo("Attempting to attach window procedure hook...");
     if (!AttachWndProc()) {
 		Logger::Instance().LogError("Failed to attach window procedure");
         return false;
     }
+	else
+	{
+        if (!initialized) Logger::Instance().LogInfo("Window procedure hook attached successfully.");
+	}
 
     running = true;
     initialized = true;
@@ -87,6 +107,7 @@ bool DLLMain::Initialize() {
 void DLLMain::Terminate() {
     if (!initialized) return;
 	GW::GameThread::RemoveGameThreadCallback(&Update_Entry);
+    //Logger::Instance().LogInfo("Terminating DLL...");
     Py4GW::Instance().Terminate();
 
     // Clean up ImGui
@@ -277,6 +298,7 @@ void DLLMain::Update(GW::HookStatus*) {
 	// Update Py4GW
 	if (!gw_client_window_handle) { gw_client_window_handle = gw_window_handle; }
 
+    //following line is empty
 	Py4GW::Instance().Update();
 
     static ULONGLONG last_tick_count;
@@ -295,10 +317,18 @@ void DLLMain::Update(GW::HookStatus*) {
 
 
 void DLLMain::Draw(IDirect3DDevice9* device) {
-    if (!initialized) return;
+    if (!initialized) {
+        Logger::Instance().LogInfo("DLL not initialized, skipping rendering.");
+        return;
+    }
 
+    //Logger::Instance().SetLogFile("Py4GW_injection_log.txt");
     // Initialize ImGui on first render
+	//if (!imgui_initialized) {
+		//Logger::Instance().LogInfo("Initializing ImGui on first render...");
+	//}
     if (!imgui_initialized && !InitializeImGui(device)) {
+		Logger::Instance().LogError("Failed to initialize ImGui on first render");
         return;
     }
 
@@ -310,6 +340,7 @@ void DLLMain::Draw(IDirect3DDevice9* device) {
             ImGui_ImplDX9_InvalidateDeviceObjects();
             imgui_initialized = false; // Force reinitialization later
         }
+		//Logger::Instance().LogError("Device lost, skipping rendering");
         return; // Skip rendering
     }
 
@@ -319,7 +350,9 @@ void DLLMain::Draw(IDirect3DDevice9* device) {
     ImGui::NewFrame();
 
     // Draw the main window
+
     Py4GW::Instance().Draw(device);
+
 
     // Render ImGui
     ImGui::EndFrame();
@@ -336,8 +369,9 @@ void DLLMain::Draw(IDirect3DDevice9* device) {
 
 
 bool DLLMain::AttachRenderHook() {
+    Logger::Instance().SetLogFile("Py4GW_injection_log.txt");
+	Logger::Instance().LogInfo("Installing render hook...");
     if (render_hook_attached) return true;
-
     GW::Render::SetRenderCallback([](IDirect3DDevice9* device) {
         DLLMain::Instance().Draw(device);
         });

@@ -11,6 +11,8 @@
 
 #include <GWCA/Managers/Module.h>
 #include <GWCA/Managers/CameraMgr.h>
+#include <GWCA/Logger/Logger.h>
+
 
 namespace {
     using namespace GW;
@@ -33,13 +35,18 @@ namespace {
 
         // @TODO: This patch is actually to stop the dx9 device setting a render setting; we could do this better by hooking the dx9 vtable directly - maybe render mgr?
         address = Scanner::Find("\x83\xE0\x01\x8B\x09\x50\x6A\x1C", "xxxxxxxx", +2);
-        if(address)
+        if (address)
             patch_fog.SetPatch(address, "\x00", 1);
+        else {
+            std::ostringstream oss;
+            oss << "Failed to Patch   = " << (void*)address;
+            Logger::Instance().LogError(oss.str());
+        }
 
 #if 0
         patch_max_dist_addr = Scanner::Find(
             "\xD8\xD9\xDF\xE0\xF6\xC4\x41\x75\x26\xD9\x46", "xxxxxxxxxxx", +0x9B);
-        GWCA_INFO("[SCAN] patch_max_dist_addr = %p\n", (void *)patch_max_dist_addr);
+        GWCA_INFO("[SCAN] patch_max_dist_addr = %p\n", (void*)patch_max_dist_addr);
 #endif
         address = Scanner::Find("\x89\x0E\xDD\xD9\x89\x56\x04\xDD", "xxxxxxxx", 0);
         if (address) {
@@ -52,17 +59,21 @@ namespace {
             if (address) {
                 patch_cam_update.SetPatch(address, "\xEB\x0F", 2);
             }
+            else {
+                std::ostringstream oss;
+                oss << "Failed to Patch   = " << (void*)address;
+                Logger::Instance().LogError(oss.str());
+            }
         }
 
         GWCA_INFO("[SCAN] patch_cam_update_addr = %p", patch_cam_update.GetAddress());
         GWCA_INFO("[SCAN] patch_fog_addr = %p", patch_fog.GetAddress());
         GWCA_INFO("[SCAN] scan_cam_class = %p", scan_cam_class);
 
-#ifdef _DEBUG
-        GWCA_ASSERT(patch_fog.GetAddress());
-        GWCA_ASSERT(patch_cam_update.GetAddress());
-        GWCA_ASSERT(scan_cam_class);
-#endif
+
+        Logger::AssertAddress("patch_fog.GetAddress()", (uintptr_t)patch_fog.GetAddress());
+		Logger::AssertAddress("patch_cam_update.GetAddress()", (uintptr_t)patch_cam_update.GetAddress());
+		Logger::AssertAddress("scan_cam_class", (uintptr_t)scan_cam_class);
     }
 
     void Exit() {

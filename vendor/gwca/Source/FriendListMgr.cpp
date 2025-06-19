@@ -10,6 +10,7 @@
 #include <GWCA/Managers/Module.h>
 #include <GWCA/Managers/FriendListMgr.h>
 #include <GWCA/Managers/UIMgr.h>
+#include <GWCA/Logger/Logger.h>
 
 namespace {
     using namespace GW;
@@ -148,8 +149,14 @@ namespace {
         GWCA_ASSERT(AddFriend_Func);
         GWCA_ASSERT(RemoveFriend_Func);
 #endif
+		Logger::AssertAddress("FriendList_Addr", FriendList_Addr);
+		Logger::AssertAddress("FriendEventHandler_Func", (uintptr_t)FriendEventHandler_Func);
+		Logger::AssertAddress("SetOnlineStatus_Func", (uintptr_t)SetOnlineStatus_Func);
+		Logger::AssertAddress("AddFriend_Func", (uintptr_t)AddFriend_Func);
+		Logger::AssertAddress("RemoveFriend_Func", (uintptr_t)RemoveFriend_Func);
+
         if(FriendEventHandler_Func)
-            HookBase::CreateHook((void**)&FriendEventHandler_Func, OnFriendEventHandler, (void**)&FriendEventHandler_Ret);
+			Logger::AssertHook("FriendEventHandler_Func", HookBase::CreateHook((void**)&FriendEventHandler_Func, OnFriendEventHandler, (void**)&FriendEventHandler_Ret));
     }
 
     void EnableHooks() {

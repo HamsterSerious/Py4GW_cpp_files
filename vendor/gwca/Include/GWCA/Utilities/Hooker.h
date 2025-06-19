@@ -19,6 +19,7 @@ namespace GW {
         static void DisableHooks(void *target = NULL);
 
         static int CreateHook(void **target, void *detour, void **trampoline);
+		static int CreateHookRaw(void* target, void* detour, void** trampoline = nullptr);
         static void RemoveHook(void *target);
 
         static void EnterHook();

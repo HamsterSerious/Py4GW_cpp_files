@@ -12,6 +12,8 @@
 #include <GWCA/Managers/Module.h>
 #include <GWCA/Managers/MerchantMgr.h>
 #include <GWCA/Managers/UIMgr.h>
+#include <GWCA/Logger/Logger.h>
+
 
 namespace {
     using namespace GW;
@@ -92,20 +94,24 @@ namespace {
         TransactItem_Func = (TransactItem_pt )Scanner::Find("\x85\xFF\x74\x1D\x8B\x4D\x14\xEB\x08", "xxxxxxxxx", -0x7F);
         RequestQuote_func = (RequestQuote_pt )Scanner::Find("\x8B\x75\x20\x83\xFE\x10\x76\x14", "xxxxxxxx", -0x35);
 
-
         GWCA_INFO("[SCAN] TransactItem Function = %p", TransactItem_Func);
         GWCA_INFO("[SCAN] RequestQuote Function = %p", RequestQuote_func);
+
+		Logger::AssertAddress("TransactItem Function", (uintptr_t)TransactItem_Func);
+		Logger::AssertAddress("RequestQuote Function", (uintptr_t)RequestQuote_func);
 
 #ifdef _DEBUG
         GWCA_ASSERT(TransactItem_Func);
         GWCA_ASSERT(RequestQuote_func);
 #endif
         if (TransactItem_Func) {
-            HookBase::CreateHook((void**)&TransactItem_Func, OnTransactItem, (void**)&TransactItem_Ret);
+            int result = HookBase::CreateHook((void**)&TransactItem_Func, OnTransactItem, (void**)&TransactItem_Ret);
+			Logger::AssertHook("TransactItem_Func", result);
             UI::RegisterUIMessageCallback(&OnTransactItemEntry, UI::UIMessage::kSendMerchantTransactItem, OnTransactItem_UIMessage, 0x1);
         }
         if (RequestQuote_func) {
-            HookBase::CreateHook((void**)&RequestQuote_func, OnRequestQuote, (void**)&RequestQuote_Ret);
+            int result = HookBase::CreateHook((void**)&RequestQuote_func, OnRequestQuote, (void**)&RequestQuote_Ret);
+			Logger::AssertHook("RequestQuote_func", result);
             UI::RegisterUIMessageCallback(&OnRequestQuoteItemEntry, UI::UIMessage::kSendMerchantRequestQuote, OnRequestQuote_UIMessage, 0x1);
         }
     }

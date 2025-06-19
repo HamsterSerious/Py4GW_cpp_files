@@ -58,6 +58,14 @@ int GW::HookBase::CreateHook(void** target, void* detour, void** trampoline)
     return MH_CreateHook(*target, detour, trampoline);
 }
 
+int GW::HookBase::CreateHookRaw(void* target, void* detour, void** trampoline)
+{
+    if (!target)
+        return -1;
+    return MH_CreateHook(target, detour, trampoline);
+}
+
+
 void GW::HookBase::RemoveHook(void *target)
 {
     if(target)

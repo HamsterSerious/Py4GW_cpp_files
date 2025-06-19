@@ -13,6 +13,7 @@
 #include <GWCA/Managers/Module.h>
 #include <GWCA/Managers/StoCMgr.h>
 #include <GWCA/Managers/GameThreadMgr.h>
+#include <GWCA/Logger/Logger.h>
 
 namespace {
     constexpr uint32_t STOC_HEADER_COUNT = 0x1e5;
@@ -140,6 +141,8 @@ namespace {
                 GameServer** addr = reinterpret_cast<GameServer**>(StoCHandler_Addr);
                 game_server_handlers = &(*addr)->gs_codec->handlers;
             }
+			Logger::AssertAddress("StoCHandler_Addr", StoCHandler_Addr);
+            
         }
 
         stoc_handler_count = game_server_handlers->size();

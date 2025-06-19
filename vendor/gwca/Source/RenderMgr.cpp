@@ -10,6 +10,8 @@
 #include <GWCA/Managers/UIMgr.h>
 #include <GWCA/Managers/RenderMgr.h>
 #include <GWCA/Managers/CameraMgr.h>
+#include <GWCA/Logger/Logger.h>
+
 
 namespace {
     using namespace GW;
@@ -105,31 +107,87 @@ namespace {
     {
         InitializeCriticalSection(&mutex);
 
-        GwReset_Func = (GwReset_pt)Scanner::ToFunctionStart(Scanner::Find("\x75\x14\x68\xca\x03\x00\x00", "xxxxxxx"));
+        // Locate function addresses
+        GwReset_Func = (GwReset_pt)Scanner::ToFunctionStart(Scanner::Find("\x75\x14\x68\x94\x02\x00\x00", "xxxxxxx"));
+        //GwReset_Func = (GwReset_pt)Scanner::ToFunctionStart(Scanner::Find("\x75\x14\x68\xca\x03\x00\x00", "xxxxxxx"));
         
-        GwEndScene_Func = (GwEndScene_pt)Scanner::ToFunctionStart(Scanner::Find("\x75\x28\x68\x8c\x08\x00\x00", "xxxxxxx"));
+        //GwEndScene_Func = (GwEndScene_pt)Scanner::ToFunctionStart(Scanner::Find("\x75\x28\x68\x8c\x08\x00\x00", "xxxxxxx"));
+		GwEndScene_Func = (GwEndScene_pt)Scanner::ToFunctionStart(Scanner::Find("\x75\x28\x68\xc4\x06\x00\x00", "xxxxxxx"));
+        GwGetTransform_func = (GwGetTransform_pt)Scanner::ToFunctionStart(Scanner::Find("\x7c\x14\x68\xdb\x02\x00\x00", "xxxxxxx"));
+        ScreenCapture_Func = (GwEndScene_pt)Scanner::ToFunctionStart(Scanner::FindAssertion("Dx9Dev.cpp", "No valid case for switch variable 'mode.Format'", 0, 0), 0xfff);
+
+        // Log the addresses as void* to ensure they appear in logs
+		Logger::AssertAddress("GwGetTransform_func", (uintptr_t)GwGetTransform_func);
+		Logger::AssertAddress("GwReset_Func", (uintptr_t)GwReset_Func);
+		Logger::AssertAddress("GwEndScene_Func", (uintptr_t)GwEndScene_Func);
+		Logger::AssertAddress("ScreenCapture_Func", (uintptr_t)ScreenCapture_Func);
         
-        GwGetTransform_func = (GwGetTransform_pt) Scanner::ToFunctionStart(Scanner::Find("\x7c\x14\x68\xdb\x02\x00\x00", "xxxxxxx"));
 
-        ScreenCapture_Func = (GwEndScene_pt)Scanner::ToFunctionStart(Scanner::FindAssertion("Dx9Dev.cpp","No valid case for switch variable 'mode.Format'",0,0), 0xfff);
+        /*
+        Logger::Instance().LogInfo("=== Resolving GwEndScene_Func ===");
 
-        GWCA_INFO("[SCAN] GwGetTransform = %p", GwGetTransform_func);
-        GWCA_INFO("[SCAN] GwReset = %p", GwReset_Func);
-        GWCA_INFO("[SCAN] GwEndScene = %p", GwEndScene_Func);
-        GWCA_INFO("[SCAN] GwScreenCapture = %p", ScreenCapture_Func);
+        // Step 1: Original pattern
+        uintptr_t addr = Scanner::Find("\x75\x28\x68\x8c\x08\x00\x00", "xxxxxxx");
+        {
+            std::ostringstream ss;
+            ss << "[GwEndScene] Original pattern result: 0x" << std::hex << addr;
+            Logger::Instance().LogInfo(ss.str().c_str());
+        }
 
-#ifdef _DEBUG
-        GWCA_ASSERT(GwGetTransform_func); // remove in the future
-        GWCA_ASSERT(GwReset_Func);
-        GWCA_ASSERT(GwEndScene_Func);
-        GWCA_ASSERT(ScreenCapture_Func);
-#endif
-        if(GwEndScene_Func)
-            HookBase::CreateHook((void**)&GwEndScene_Func, OnGwEndScene, (void**)&RetGwEndScene);
-        if(ScreenCapture_Func)
-            HookBase::CreateHook((void**)&ScreenCapture_Func, OnScreenCapture, (void**)&RetScreenCapture);
-        if(GwReset_Func)
-            HookBase::CreateHook((void**)&GwReset_Func, OnGwReset, (void**)&RetGwReset);
+        // Step 2: Try relaxed pattern
+        if (!addr) {
+            addr = Scanner::Find("\x75\x28\x68", "xxx");  // Looser match
+            std::ostringstream ss;
+            ss << "[GwEndScene] Relaxed pattern result: 0x" << std::hex << addr;
+            Logger::Instance().LogInfo(ss.str().c_str());
+        }
+
+        // Step 3: Fallback - scan .text section manually
+        if (!addr) {
+            uintptr_t start = 0, end = 0;
+            Scanner::GetSectionAddressRange(Section_TEXT, &start, &end);
+            Logger::Instance().LogInfo("[GwEndScene] Trying FindInRange fallback...");
+
+            addr = Scanner::FindInRange("\x68", "x", 0, start, end);
+            size_t count = 0;
+            while (addr && count < 100) {
+                uintptr_t maybe_func = Scanner::ToFunctionStart(addr);
+                std::ostringstream ss;
+                ss << "[GwEndScene] Candidate func start from push at 0x" << std::hex << addr
+                    << " resolved to func: 0x" << std::hex << maybe_func;
+                Logger::Instance().LogInfo(ss.str().c_str());
+
+                addr += 1;
+                ++count;
+            }
+        }
+
+        GwEndScene_Func = (GwEndScene_pt)Scanner::ToFunctionStart(addr);
+        {
+            std::ostringstream ss;
+            ss << "Final GwEndScene_Func = " << (void*)GwEndScene_Func;
+            Logger::Instance().LogInfo(ss.str().c_str());
+        }
+
+        */
+        // Hook each function and log the result
+
+        if (GwEndScene_Func) {
+            //bool success = HookBase::CreateHookRaw((void**)&GwEndScene_Func, OnGwEndScene, (void**)&RetGwEndScene);
+            int success = HookBase::CreateHook((void**)&GwEndScene_Func, OnGwEndScene, (void**)&RetGwEndScene);
+			Logger::AssertHook("GwEndScene_Func", success);
+
+        }
+        if (ScreenCapture_Func) {
+            int success = HookBase::CreateHook((void**)&ScreenCapture_Func, OnScreenCapture, (void**)&RetScreenCapture);
+			Logger::AssertHook("RenderMgr: ScreenCapture_Func", success);
+        }
+        if (GwReset_Func) {
+            int success = HookBase::CreateHook((void**)&GwReset_Func, OnGwReset, (void**)&RetGwReset);
+			Logger::AssertHook("RenderMgr: GwReset_Func", success);
+        }
+
+
     }
 
     void EnableHooks()

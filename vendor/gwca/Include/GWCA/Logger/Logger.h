@@ -11,6 +11,8 @@ public:
     bool LogInfo(const std::string& message);
     bool LogWarning(const std::string& message);
     bool LogError(const std::string& message);
+    static bool AssertAddress(const std::string& name, uintptr_t address);
+    static bool AssertHook(const std::string& name, int status);
 
     // Initialize and terminate logging
     void SetLogFile(const std::string& file_path);

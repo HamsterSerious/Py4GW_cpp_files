@@ -23,6 +23,7 @@
 #include <GWCA/Managers/PlayerMgr.h>
 #include <GWCA/Managers/ChatMgr.h>
 #include <GWCA/Managers/MapMgr.h>
+#include <GWCA/Logger/Logger.h>
 
 namespace {
     using namespace GW;
@@ -101,7 +102,9 @@ namespace {
         address = Scanner::FindAssertion("\\Code\\Gw\\Ui\\Game\\Party\\PtPlayer.cpp", "No valid case for switch variable '\"\"'", 0, 0x27);
         SetReadyStatus_Func = (DoAction_pt)Scanner::FunctionFromNearCall(address);
 
-        address = Scanner::Find("\x8d\x45\x10\x50\x56\x6a\x4d\x57","xxxxxxxx");
+        //address = Scanner::Find("\x8d\x45\x10\x50\x56\x6a\x4d\x57","xxxxxxxx");
+        address = Scanner::Find("\x8d\x45\x10\x50\x56\x6a\x4e\x57", "xxxxxxxx");
+		Logger::AssertAddress("FlagAgent address", (uintptr_t)address);
         if (Scanner::IsValidPtr(address, ScannerSection::Section_TEXT)) {
             address = Scanner::FindInRange("\x83\xc4\x04\x50\xe8", "xxxxx", 4, address, address + 0x64);
             FlagHeroAgent_Func = (FlagHeroAgent_pt)Scanner::FunctionFromNearCall(address);
@@ -110,6 +113,7 @@ namespace {
         }
 
         address = Scanner::Find("\x83\xc4\x10\x83\xff\x03\x75\x17", "xxxxxxxx",0x38);
+		Logger::AssertAddress("PetTarget address", (uintptr_t)address);
         if (Scanner::IsValidPtr(address, ScannerSection::Section_TEXT)) {
 
             LockPetTarget_Func = (LockPetTarget_pt)Scanner::FunctionFromNearCall(address);
@@ -143,7 +147,18 @@ namespace {
         GWCA_ASSERT(SetHeroBehavior_Func);
         GWCA_ASSERT(LockPetTarget_Func);
 #endif
-        HookBase::CreateHook((void**)&TickButtonUICallback, OnTickButtonUICallback, (void**)&TickButtonUICallback_Ret);
+		Logger::AssertAddress("PartyWindowButtonCallback_Func", (uintptr_t)PartyWindowButtonCallback_Func);
+		Logger::AssertAddress("PartySearchButtonCallback_Func", (uintptr_t)PartySearchButtonCallback_Func);
+		Logger::AssertAddress("TickButtonUICallback", (uintptr_t)TickButtonUICallback);
+		Logger::AssertAddress("SetReadyStatus_Func", (uintptr_t)SetReadyStatus_Func);
+		Logger::AssertAddress("FlagHeroAgent_Func", (uintptr_t)FlagHeroAgent_Func);
+		Logger::AssertAddress("FlagAll_Func", (uintptr_t)FlagAll_Func);
+		Logger::AssertAddress("SetHeroBehavior_Func", (uintptr_t)SetHeroBehavior_Func);
+		Logger::AssertAddress("LockPetTarget_Func", (uintptr_t)LockPetTarget_Func);
+
+
+        int success = HookBase::CreateHook((void**)&TickButtonUICallback, OnTickButtonUICallback, (void**)&TickButtonUICallback_Ret);
+		Logger::AssertHook("TickButtonUICallback", success);
     }
 
     void EnableHooks() {

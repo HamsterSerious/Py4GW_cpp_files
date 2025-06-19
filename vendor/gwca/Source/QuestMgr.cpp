@@ -13,6 +13,7 @@
 
 #include <GWCA/Managers/UIMgr.h>
 #include <GWCA/Managers/QuestMgr.h>
+#include <GWCA/Logger/Logger.h>
 
 namespace {
     using namespace GW;
@@ -88,13 +89,19 @@ namespace {
         GWCA_ASSERT(RequestQuestData_Func);
         GWCA_ASSERT(RequestQuestInfo_Func);
 #endif
+		Logger::AssertAddress("AbandonQuest_Func", (uintptr_t)AbandonQuest_Func);
+		Logger::AssertAddress("SetActiveQuest_Func", (uintptr_t)SetActiveQuest_Func);
+		Logger::AssertAddress("RequestQuestData_Func", (uintptr_t)RequestQuestData_Func);
+		Logger::AssertAddress("RequestQuestInfo_Func", (uintptr_t)RequestQuestInfo_Func);
 
         if (AbandonQuest_Func) {
-            HookBase::CreateHook((void**)&AbandonQuest_Func, OnAbandonQuest, (void**)&AbandonQuest_Ret);
+            int result = HookBase::CreateHook((void**)&AbandonQuest_Func, OnAbandonQuest, (void**)&AbandonQuest_Ret);
+			Logger::AssertHook("AbandonQuest_Func", result);
             UI::RegisterUIMessageCallback(&AbandonQuest_HookEntry, UI::UIMessage::kSendAbandonQuest, OnAbandonQuest_UIMessage, 0x1);
         }
         if (SetActiveQuest_Func) {
-            HookBase::CreateHook((void**)&SetActiveQuest_Func, OnSetActiveQuest, (void**)&SetActiveQuest_Ret);
+            int result = HookBase::CreateHook((void**)&SetActiveQuest_Func, OnSetActiveQuest, (void**)&SetActiveQuest_Ret);
+			Logger::AssertHook("SetActiveQuest_Func", result);
             UI::RegisterUIMessageCallback(&SetActiveQuest_HookEntry, UI::UIMessage::kSendSetActiveQuest, OnSetActiveQuest_UIMessage, 0x1);
         }
 

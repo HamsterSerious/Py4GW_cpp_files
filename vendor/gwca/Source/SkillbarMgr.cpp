@@ -23,6 +23,7 @@
 #include <GWCA/Managers/UIMgr.h>
 #include <GWCA/Managers/GameThreadMgr.h>
 #include "GWCA/Context/GameContext.h"
+#include <GWCA/Logger/Logger.h>
 
 namespace {
     using namespace GW;
@@ -171,13 +172,21 @@ namespace {
         GWCA_ASSERT(LoadSkills_Func);
         GWCA_ASSERT(UseSkill_Func);
 #endif
+		Logger::AssertAddress("skill_array_addr", (uintptr_t)skill_array_addr);
+		Logger::AssertAddress("attribute_array_addr", (uintptr_t)attribute_array_addr);
+		Logger::AssertAddress("ChangeSecondary_Func", (uintptr_t)ChangeSecondary_Func);
+		Logger::AssertAddress("LoadAttributes_Func", (uintptr_t)LoadAttributes_Func);
+		Logger::AssertAddress("LoadSkills_Func", (uintptr_t)LoadSkills_Func);
+		Logger::AssertAddress("UseSkill_Func", (uintptr_t)UseSkill_Func);
 
         if (UseSkill_Func) {
-            HookBase::CreateHook((void**)&UseSkill_Func, OnUseSkill, (void**)&RetUseSkill);
+            int resutlt = HookBase::CreateHook((void**)&UseSkill_Func, OnUseSkill, (void**)&RetUseSkill);
+			Logger::AssertHook("UseSkill_Func", resutlt);
         }
 
         if (LoadSkills_Func) {
-            HookBase::CreateHook((void**)&LoadSkills_Func, OnLoadSkillbar, (void**)&RetLoadSkills);
+            int result = HookBase::CreateHook((void**)&LoadSkills_Func, OnLoadSkillbar, (void**)&RetLoadSkills);
+			Logger::AssertHook("LoadSkills_Func", result);
             UI::RegisterUIMessageCallback(&OnLoadSkillbar_HookEntry, UI::UIMessage::kSendLoadSkillbar, OnLoadSkillbar_UIMessage, 0x1);
         }
 

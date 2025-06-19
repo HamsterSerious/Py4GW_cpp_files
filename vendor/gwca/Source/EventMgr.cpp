@@ -9,6 +9,7 @@
 
 #include <GWCA/Managers/Module.h>
 #include <GWCA/Managers/EventMgr.h>
+#include <GWCA/Logger/Logger.h>
 
 namespace {
     using namespace GW;
@@ -67,7 +68,9 @@ namespace {
 
         uintptr_t address = Scanner::Find("\x68\x08\x08\x00\x00\x8d\x85\xf4\xf7\xff\xff", "xxxxxxxxxxx", 0x16);
         SendEventMessage_Func = (SendEventMessage_pt)Scanner::FunctionFromNearCall(address);
-        HookBase::CreateHook((void**)&SendEventMessage_Func, OnSendEventMessage, (void**)&SendEventMessage_Ret);
+		Logger::AssertAddress("SendEventMessage_Func", (uintptr_t)SendEventMessage_Func);
+        int result = HookBase::CreateHook((void**)&SendEventMessage_Func, OnSendEventMessage, (void**)&SendEventMessage_Ret);
+		Logger::AssertHook("SendEventMessage_Func", result);
 
         GWCA_INFO("[SCAN] SendEventMessage_Func = %p", SendEventMessage_Func);
 

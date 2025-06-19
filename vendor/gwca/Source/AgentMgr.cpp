@@ -20,6 +20,7 @@
 
 #include <GWCA/Utilities/Hooker.h>
 #include <GWCA/Utilities/Scanner.h>
+#include <GWCA/Logger/Logger.h>
 
 namespace {
     using namespace GW;
@@ -147,7 +148,7 @@ namespace {
 
         address = Scanner::Find("\x5D\xE9\x00\x00\x00\x00\x55\x8B\xEC\x53","xx????xxxx", -0xE);
         if (address && Scanner::IsValidPtr(*(uintptr_t*)address))
-            PlayerAgentIdPtr = *(uintptr_t*)address;
+            PlayerAgentIdPtr = *(uintptr_t*)address;	
 
         // @Cleanup: try to do this via UI controls to avoid more signature scans
         address = Scanner::Find("\x89\x4b\x24\x8b\x4b\x28\x83\xe9\x00", "xxxxxxxxx");
@@ -161,11 +162,15 @@ namespace {
 
         DoWorldActon_Func = (DoWorldActon_pt)GW::Scanner::ToFunctionStart(Scanner::FindAssertion("GmCoreAction.cpp", "action < WORLD_ACTIONS",0,0)); // This hits twice, but we want the first function
 
-        HookBase::CreateHook((void**)&DoWorldActon_Func, OnDoWorldActon_Func, (void**)&DoWorldActon_Ret);
+        int success = HookBase::CreateHook((void**)&DoWorldActon_Func, OnDoWorldActon_Func, (void**)&DoWorldActon_Ret);
+        Logger::AssertHook("DoWorldActon_Func", success);
 
-        HookBase::CreateHook((void**)&SendAgentDialog_Func, OnSendAgentDialog_Func, (void**)&SendAgentDialog_Ret);
-        HookBase::CreateHook((void**)&SendGadgetDialog_Func, OnSendGadgetDialog_Func, (void**)&SendGadgetDialog_Ret);
-        HookBase::CreateHook((void**)&ChangeTarget_Func, OnChangeTarget_Func, (void**)&ChangeTarget_Ret);
+        success = HookBase::CreateHook((void**)&SendAgentDialog_Func, OnSendAgentDialog_Func, (void**)&SendAgentDialog_Ret);
+		Logger::AssertHook("SendAgentDialog_Func", success);
+        success = HookBase::CreateHook((void**)&SendGadgetDialog_Func, OnSendGadgetDialog_Func, (void**)&SendGadgetDialog_Ret);
+		Logger::AssertHook("SendGadgetDialog_Func", success);
+        success = HookBase::CreateHook((void**)&ChangeTarget_Func, OnChangeTarget_Func, (void**)&ChangeTarget_Ret);
+		Logger::AssertHook("ChangeTarget_Func", success);
 
         GWCA_INFO("[SCAN] AgentArrayPtr = %p", AgentArrayPtr);
         GWCA_INFO("[SCAN] PlayerAgentIdPtr = %p", PlayerAgentIdPtr);
@@ -174,14 +179,15 @@ namespace {
         GWCA_INFO("[SCAN] SendAgentDialog_Func = %p", SendAgentDialog_Func);
         GWCA_INFO("[SCAN] SendGadgetDialog_Func = %p", SendGadgetDialog_Func);
 
-#ifdef _DEBUG
-        GWCA_ASSERT(AgentArrayPtr);
-        GWCA_ASSERT(PlayerAgentIdPtr);
-        GWCA_ASSERT(MoveTo_Func);
-        GWCA_ASSERT(ChangeTarget_Func);
-        GWCA_ASSERT(SendAgentDialog_Func);
-        GWCA_ASSERT(SendGadgetDialog_Func);
-#endif
+
+        Logger::AssertAddress("AgentArrayPtr", (uintptr_t)AgentArrayPtr);
+        Logger::AssertAddress("PlayerAgentIdPtr", (uintptr_t)PlayerAgentIdPtr);
+		Logger::AssertAddress("MoveTo_Func", (uintptr_t)MoveTo_Func);
+		Logger::AssertAddress("ChangeTarget_Func", (uintptr_t)ChangeTarget_Func);
+		Logger::AssertAddress("SendAgentDialog_Func", (uintptr_t)SendAgentDialog_Func);
+		Logger::AssertAddress("SendGadgetDialog_Func", (uintptr_t)SendGadgetDialog_Func);
+
+
 
 
 

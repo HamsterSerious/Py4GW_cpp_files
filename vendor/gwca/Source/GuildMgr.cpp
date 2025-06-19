@@ -11,6 +11,7 @@
 #include <GWCA/Managers/MapMgr.h>
 
 #include <GWCA/Managers/GuildMgr.h>
+#include <GWCA/Logger/Logger.h>
 
 namespace GW {
 
