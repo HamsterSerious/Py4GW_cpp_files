@@ -77,22 +77,27 @@ void Overlay::GetScreenToWorld() {
 
         GlobalMouseClass setmousepos;
         GW::Vec2f* screen_coord = 0;
-        uintptr_t address = GW::Scanner::Find("\x8B\xE5\x5D\xC3\x8B\x4F\x10\x83\xC7\x08", "xxxxxxxxxx", 0xC);
-        //uintptr_t address = ptrGetter.GetNdcScreenCoordsPtr();
+        //uintptr_t address = GW::Scanner::Find("\x8B\xE5\x5D\xC3\x8B\x4F\x10\x83\xC7\x08", "xxxxxxxxxx", 0xC);
+        uintptr_t address = GW::Scanner::Find("\x83\x3d\x00\x00\x00\x00\x00\x0f\x00\x00\x00\x00\x00\x8b\x4f\x10", "xx????xx?????xxx", 0x15);
+		Logger::AssertAddress("ptrNdcScreenCoords", (uintptr_t)address);
         if (Verify(address))
         {
             screen_coord = *reinterpret_cast<GW::Vec2f**>(address);
         }
         else { setmousepos.SetMouseWorldPos(0, 0, 0); return; }
 
-        address = GW::Scanner::Find("\xD9\x5D\x14\xD9\x45\x14\x83\xEC\x0C", "xxxxxxxx", -0x2F);
+        //address = GW::Scanner::Find("\xD9\x5D\x14\xD9\x45\x14\x83\xEC\x0C", "xxxxxxxx", -0x2F);
+        address = GW::Scanner::ToFunctionStart(GW::Scanner::Find("\xD9\x5D\x14\xD9\x45\x14\x83\xEC\x0C", "xxxxxxxx", 0));
+		Logger::AssertAddress("ScreenToWorldPoint_Func", (uintptr_t)address);
         if (address)
         {
             ScreenToWorldPoint_Func = (ScreenToWorldPoint_pt)address;
         }
         else { setmousepos.SetMouseWorldPos(0, 0, 0); return; }
 
-        address = GW::Scanner::Find("\xff\x75\x08\xd9\x5d\xfc\xff\x77\x7c", "xxxxxxxxx", -0x27);
+        //address = GW::Scanner::Find("\xff\x75\x08\xd9\x5d\xfc\xff\x77\x7c", "xxxxxxxxx", -0x27);
+        address = GW::Scanner::ToFunctionStart(GW::Scanner::Find("\xff\x75\x08\xd9\x5d\xfc\xff\x77\x7c", "xxxxxxx", 0));
+		Logger::AssertAddress("MapIntersect_Func", (uintptr_t)address);
         if (address) {
             MapIntersect_Func = (MapIntersect_pt)address;
         }
@@ -1050,6 +1055,31 @@ std::vector<PathingMap> GetPathingMaps() {
     return converted_maps;
 }
 
+std::vector<std::tuple<float, float, float>> GetPlannedPath(float start_x, float start_y, float start_z,
+	                                     float goal_x, float goal_y, float goal_z=0) 
+{
+	// Check if the function pointer is valid
+    std::vector<std::tuple<float, float, float>> result;
+    if (!GW::FindPath_Func)
+        return result;
+    GW::PathPoint pathArray[30];
+    uint32_t pathCount = 30;
+    GW::GamePos game_pos = GW::GamePos(start_x, start_y, start_z);
+    GW::PathPoint start{ game_pos, nullptr };
+    GW::GamePos goal = GW::GamePos(goal_x, goal_y, goal_z);
+	GW::PathPoint goal_point{ goal, nullptr };
+
+    GW::FindPath_Func(&start, &goal_point, 4500.0f, pathCount, &pathCount, pathArray);
+
+    for (uint32_t i = 0; i < pathCount; ++i) {
+        const GW::GamePos& p = pathArray[i].pos;
+        result.push_back({ p.x, p.y, p.zplane });
+    }
+
+    return result;
+}
+
+
 
 
 namespace py = pybind11;
@@ -1205,6 +1235,9 @@ PYBIND11_EMBEDDED_MODULE(PyPathing, m) {
     // Bind the GetPathingMaps function
     m.def("get_map_boundaries", &GetMapBoundaries, "Retrieve map boundaries");
     m.def("get_pathing_maps", &GetPathingMaps, "Retrieve and convert all pathing maps");
+	m.def("get_planned_path", &GetPlannedPath, "Get planned path from start to goal",
+		py::arg("start_x"), py::arg("start_y"), py::arg("start_z"),
+		py::arg("goal_x"), py::arg("goal_y"), py::arg("goal_z") = 0.0f);
 }
 
 PyCamera::PyCamera() {

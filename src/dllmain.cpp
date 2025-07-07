@@ -6,6 +6,7 @@
 #include "Headers.h"
 #include "WinUser.h"
 #include "hidusage.h"
+#include <WindowsX.h>
 #include <cassert>
 
 #ifndef ASSERT
@@ -142,8 +143,10 @@ void SetupImGuiFonts() {
     io.Fonts->AddFontDefault();
 
     // Load custom font with configuration
-    std::string fontPath = dllDirectory + "\\fonts\\friz-quadrata-std-medium-5870338ec7ef8.otf";
-    ImFont* customFont = io.Fonts->AddFontFromFileTTF(fontPath.c_str(), 14.0f, &fontConfig);
+	FontManager::Instance().SetFontDirectory(dllDirectory + "\\fonts");
+    ImFont* customFont = FontManager::Instance().Get(0);
+    //std::string fontPath = dllDirectory + "\\fonts\\friz-quadrata-std-medium-5870338ec7ef8.otf";
+    //ImFont* customFont = io.Fonts->AddFontFromFileTTF(fontPath.c_str(), 14.0f, &fontConfig);
     io.FontDefault = customFont; // Set as default font
 
     // Configure Font Awesome font loading
@@ -159,11 +162,13 @@ void SetupImGuiFonts() {
 
     std::string faRegularPath = dllDirectory + "\\fonts\\Font Awesome 6 Free-Regular-400.otf";
     std::string faSolidPath = dllDirectory + "\\fonts\\Font Awesome 6 Free-Solid-900.otf";
+	//std::string faBrandsPath = dllDirectory + "\\fonts\\Font Awesome 6 Brands-Regular-400.otf";
 
     io.Fonts->AddFontFromFileTTF(faRegularPath.c_str(), 20.0f, &fontConfig, icons_ranges);
     io.Fonts->AddFontFromFileTTF(faSolidPath.c_str(), 20.0f, &fontConfig, icons_ranges);
+	//io.Fonts->AddFontFromFileTTF(faBrandsPath.c_str(), 20.0f, &fontConfig, icons_ranges);
 
-
+    FontManager::Instance().LoadFonts();
     // Create DirectX 9 device objects
     ImGui_ImplDX9_CreateDeviceObjects();
 }
@@ -432,6 +437,10 @@ LRESULT CALLBACK DLLMain::WndProc(HWND hWnd, UINT Message, WPARAM wParam, LPARAM
     auto& instance = DLLMain::Instance();
     ImGuiIO& io = ImGui::GetIO();
 
+    io.MouseDown[0] = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+    io.MouseDown[1] = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
+
+
     if (Message == WM_RBUTTONUP) {right_mouse_down = false;}
     if (Message == WM_RBUTTONDOWN) {right_mouse_down = true;}
     if (Message == WM_RBUTTONDBLCLK) {right_mouse_down = true;}
@@ -439,6 +448,11 @@ LRESULT CALLBACK DLLMain::WndProc(HWND hWnd, UINT Message, WPARAM wParam, LPARAM
 	if (right_mouse_down) {
 		return CallWindowProc(instance.old_wndproc, hWnd, Message, wParam, lParam);
 	}
+
+    POINT mouse_pos;
+    GetCursorPos(&mouse_pos);
+    ScreenToClient(hWnd, &mouse_pos);
+    io.MousePos = ImVec2((float)mouse_pos.x, (float)mouse_pos.y);
 
 	if (Message == WM_LBUTTONDOWN && !dragging_initialized) {
 		if (io.WantCaptureMouse) {
@@ -448,9 +462,12 @@ LRESULT CALLBACK DLLMain::WndProc(HWND hWnd, UINT Message, WPARAM wParam, LPARAM
 		else {
 			is_dragging = true;
 			is_dragging_imgui = false;
-            return CallWindowProc(instance.old_wndproc, hWnd, Message, wParam, lParam);
+
+            const auto result =  CallWindowProc(instance.old_wndproc, hWnd, Message, wParam, lParam);
+			return result;
 		}
 	}
+
 
 	if (Message == WM_LBUTTONUP) {
 		is_dragging = false;
@@ -469,6 +486,7 @@ LRESULT CALLBACK DLLMain::WndProc(HWND hWnd, UINT Message, WPARAM wParam, LPARAM
 
     ImGui_ImplWin32_WndProcHandler(hWnd, Message, wParam, lParam);
     io = ImGui::GetIO();
+
 	if (io.WantCaptureMouse && 
 		(Message == WM_MOUSEMOVE || 
          Message == WM_LBUTTONDOWN || 

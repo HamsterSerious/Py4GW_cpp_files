@@ -1,6 +1,10 @@
 #include "py_imgui.h"
 
 // Text
+void ImGui_NewLine() {
+	ImGui::NewLine();
+}
+
 void ImGui_Text(const std::string& text) {
     ImGui::Text("%s", text.c_str());
 }
@@ -42,6 +46,53 @@ void ImGui_TextScaled(std::string& text, const std::array<float, 4>& color, floa
     // Restore the original font size
     currentFont->Scale = originalFontSize;  // Restore original font scale
     ImGui::PopFont();  // Pop the font after rendering
+}
+
+void ImGui_PushFont(int font_id) {
+    if (font_id < 0 || font_id >= static_cast<int>(FontID::Count)) {
+        ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[0]); // Default font
+        return;
+    }
+
+    ImFont* font = FontManager::Instance().Get(font_id);
+    if (font) {
+        ImGui::PushFont(font);
+    }
+    else {
+        ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[0]); // Fallback
+    }
+}
+
+void ImGui_PopFont() {
+	ImGui::PopFont();
+}
+
+static float g_original_font_scale = 1.0f;
+
+void ImGui_PushFontScaled(int font_id, float scale) {
+    if (font_id < 0 || font_id >= static_cast<int>(FontID::Count)) {
+        ImFont* fallback = ImGui::GetIO().Fonts->Fonts[0];
+        g_original_font_scale = fallback->Scale;
+        fallback->Scale = scale;
+        ImGui::PushFont(fallback);
+        return;
+    }
+
+    ImFont* font = FontManager::Instance().Get(font_id);
+    if (!font) {
+        font = ImGui::GetIO().Fonts->Fonts[0];
+    }
+
+    g_original_font_scale = font->Scale;
+    font->Scale = scale;
+    ImGui::PushFont(font);
+
+}
+
+void ImGui_PopFontScaled() {
+    ImFont* font = ImGui::GetFont();
+    font->Scale = g_original_font_scale;
+    ImGui::PopFont();
 }
 
 void ImGui_SetWindowFontScale(float scale) {
@@ -1436,6 +1487,7 @@ PYBIND11_EMBEDDED_MODULE(PyImGui, m) {
             });
 
     // Basic Widgets
+	m.def("new_line", &ImGui_NewLine, "Inserts a new line in ImGui");
     m.def("text", &ImGui_Text, "Displays a text in ImGui");
     m.def("text_wrapped", &ImGui_TextWrapped, "Displays a text_wrapped in ImGui");
     m.def("text_colored", &ImGui_TextColored, "Displays a text in a colored font in ImGui");
@@ -1443,6 +1495,10 @@ PYBIND11_EMBEDDED_MODULE(PyImGui, m) {
     //m.def("text_ex", &ImGui_TextEx, "Displays a text with flags in ImGui");
     m.def("text_unformatted", &ImGui_TextUnformatted, "Displays an unformatted text in ImGui");
 	m.def("text_scaled", &ImGui_TextScaled, "Displays a scaled text in ImGui");
+	m.def("push_font", &ImGui_PushFont, "Pushes a font onto the stack in ImGui");
+	m.def("pop_font", &ImGui_PopFont, "Pops a font from the stack in ImGui");
+	m.def("push_font_scaled", &ImGui_PushFontScaled, "Pushes a scaled font onto the stack in ImGui");
+	m.def("pop_font_scaled", &ImGui_PopFontScaled, "Pops a scaled font from the stack in ImGui");
 	m.def("set_window_font_scale", &ImGui_SetWindowFontScale, "Sets the font scale for the current window in ImGui");
 
 

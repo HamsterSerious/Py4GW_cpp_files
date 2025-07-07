@@ -683,6 +683,7 @@ enum class HeroType {
 
 
 #include <GWCA/GameEntities/Hero.h>
+#include <GWCA/Logger/Logger.h>
 
 typedef float(__cdecl* ScreenToWorldPoint_pt)(GW::Vec3f* vec, float screen_x, float screen_y, int unk1);
 extern ScreenToWorldPoint_pt ScreenToWorldPoint_Func;
@@ -706,6 +707,7 @@ namespace GW {
     static void InitPathfinding() {
         //FindPath_Func = (FindPath_pt)GW::Scanner::Find("\x83\xec\x20\x53\x8b\x5d\x1c\x56\x57\xe8", "xxxxxxxxxx", -0x3);
         FindPath_Func = (FindPath_pt)GW::Scanner::Find("\x83\xec\x20\x53\x56\x57\xe8\x92\x8a\xdd", "xxxxxxxxxx", -0x3);
+        Logger::AssertAddress("FindPath_Func", (uintptr_t)FindPath_Func);
     }
 
     typedef void(__stdcall* UseHeroSkillInstant_t)(uint32_t hero_agent_id, uint32_t skill_slot, uint32_t target_id);
@@ -840,10 +842,11 @@ extern Timer salvage_timer;
 
 
 //manually added libs
-#include <GWCA/Logger/Logger.h>
+
 #include <commdlg.h>
 #include "py_overlay.h"
 #include "py_ui.h"
+#include "FontManager.h"
 #include "py_imgui.h"
 #include "py_map.h"
 #include "py_items.h"
