@@ -134,6 +134,20 @@ namespace GW {
             return GetTitleTrack(GetActiveTitleId());
         }
 
+        std::vector<int> GetTitleIDs() {
+            std::vector<int> title_ids;
+            auto a = GetTitleArray();
+            if (!a)
+                return title_ids;
+
+            title_ids.reserve(a->size());
+            for (size_t i = 0; i < a->size(); i++) {
+                title_ids.push_back(static_cast<int>(i)); // index == TitleID
+            }
+            return title_ids;
+        }
+
+
         uint32_t GetAmountOfPlayersInInstance() {
             return Agents::GetAmountOfPlayersInInstance();
         }

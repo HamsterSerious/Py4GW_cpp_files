@@ -398,8 +398,27 @@ bool DLLMain::AttachWndProc()
 
     Logger::Instance().LogInfo("installing event handler.");
     gw_window_handle = GW::MemoryMgr::GetGWWindowHandle();
-    old_wndproc = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(gw_window_handle, GWL_WNDPROC, reinterpret_cast<LONG>(SafeWndProc)));
-    Logger::Instance().LogInfo("Installed input event handler, oldwndproc = 0x%X\n");
+
+
+    //old_wndproc = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(gw_window_handle, GWL_WNDPROC, reinterpret_cast<LONG>(SafeWndProc)));
+    //Logger::Instance().LogInfo("Installed input event handler, oldwndproc = 0x%X\n");
+
+    SetLastError(0);
+    old_wndproc = reinterpret_cast<WNDPROC>(
+        SetWindowLongPtrW(gw_window_handle, GWLP_WNDPROC,
+            reinterpret_cast<LONG_PTR>(SafeWndProc))
+        );
+    if (old_wndproc == nullptr && GetLastError() != 0) {
+        Logger::Instance().LogError("AttachWndProc: SetWindowLongPtrW failed");
+        return false;
+    }
+
+    // Correctly log the previous proc pointer
+    {
+        char buf[128];
+        sprintf_s(buf, "Installed input event handler, oldwndproc = 0x%p", (void*)old_wndproc);
+        Logger::Instance().LogInfo(buf);
+    }
 
     // RegisterRawInputDevices to be able to receive WM_INPUT via WndProc
     static RAWINPUTDEVICE rid;
@@ -419,6 +438,27 @@ void DLLMain::DetachWndProc() {
     SetWindowLongPtr(gw_window_handle, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(old_wndproc));
     wndproc_attached = false;
     old_wndproc = nullptr;
+
+    /*
+    if (!wndproc_attached || !old_wndproc)
+        return;
+
+    SetLastError(0);
+    LONG_PTR result = SetWindowLongPtrW(
+        gw_window_handle,
+        GWLP_WNDPROC,
+        reinterpret_cast<LONG_PTR>(old_wndproc)
+    );
+
+    if (result == 0 && GetLastError() != 0) {
+        Logger::Instance().LogError("DetachWndProc: SetWindowLongPtrW failed");
+    }
+    else {
+        Logger::Instance().LogInfo("WndProc restored successfully.");
+    }
+
+    wndproc_attached = false;
+    old_wndproc = nullptr;*/
 }
 
 LRESULT CALLBACK DLLMain::SafeWndProc(const HWND hWnd, const UINT Message, const WPARAM wParam, const LPARAM lParam) noexcept
@@ -431,7 +471,6 @@ LRESULT CALLBACK DLLMain::SafeWndProc(const HWND hWnd, const UINT Message, const
     }
 }
 
-
 LRESULT CALLBACK DLLMain::WndProc(HWND hWnd, UINT Message, WPARAM wParam, LPARAM lParam) {
     static bool right_mouse_down = false; // Track problematic actions
     auto& instance = DLLMain::Instance();
@@ -440,6 +479,14 @@ LRESULT CALLBACK DLLMain::WndProc(HWND hWnd, UINT Message, WPARAM wParam, LPARAM
     //io.MouseDown[0] = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
     //io.MouseDown[1] = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
 
+    // Let WM_SETTEXT/WM_GETTEXT always pass through to original WndProc
+    if (Message == WM_SETTEXT ||
+        Message == WM_GETTEXT ||
+        Message == WM_GETTEXTLENGTH)
+    {
+        // Let Windows itself handle caption text
+        return DefWindowProc(hWnd, Message, wParam, lParam);
+    }
 
     if (Message == WM_RBUTTONUP) {right_mouse_down = false;}
     if (Message == WM_RBUTTONDOWN) {right_mouse_down = true;}
@@ -485,6 +532,8 @@ LRESULT CALLBACK DLLMain::WndProc(HWND hWnd, UINT Message, WPARAM wParam, LPARAM
 	}
 
     ImGui_ImplWin32_WndProcHandler(hWnd, Message, wParam, lParam);
+
+
     io = ImGui::GetIO();
 
 	if (io.WantCaptureMouse && 

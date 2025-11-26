@@ -345,6 +345,9 @@ PYBIND11_EMBEDDED_MODULE(PyUIManager, m) {
 		.def_static("set_int_preference", &UIManager::SetIntPreference, py::arg("pref"), py::arg("value"), "Sets the value of an integer preference.")
 		.def_static("set_string_preference", &UIManager::SetStringPreference, py::arg("pref"), py::arg("value"), "Sets the value of a string preference.")
 		.def_static("set_bool_preference", &UIManager::SetBoolPreference, py::arg("pref"), py::arg("value"), "Sets the value of a boolean preference.")
+		.def_static("get_key_mappings", &UIManager::GetKeyMappings, "Gets the current key mappings.")
+		.def_static("set_key_mappings", &UIManager::SetKeyMappings, py::arg("mappings"), "Sets new key mappings.")
+
 
 		.def_static("button_click", &UIManager::ButtonClick, py::arg("frame_id"), "Simulates a button click on a frame.")
 		.def_static("test_mouse_action", &UIManager::TestMouseAction, py::arg("frame_id"), py::arg("current_state"), py::arg("wparam_value") = 0, py::arg("lparam") = 0, "Simulates a mouse action on a frame.")

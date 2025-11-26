@@ -214,6 +214,47 @@ namespace GW {
             RequestQuestData_Func((uint32_t)quest_id, update_markers);
             return true;
         }
+
+		void AsyncGetQuestName(const Quest* quest, std::wstring& res) {
+			if (!quest) return;
+			if (!quest || !quest->name) return;
+			wchar_t* str = quest->name;
+			UI::AsyncDecodeStr(str, &res);
+		}
+
+		void AsyncDecodeAnyEncStr(const wchar_t* str, std::wstring& res) {
+			if (!str) return;
+			UI::AsyncDecodeStr(str, &res);
+		}
+
+        void AsyncGetQuestDescription(const Quest* quest, std::wstring& res) {
+            if (!quest) return;
+            if (!quest || !quest->description) return;
+            wchar_t* str = quest->description;
+            UI::AsyncDecodeStr(str, &res);
+        }
+
+		void AsyncGetQuestObjectives(const Quest* quest, std::wstring& res) {
+			if (!quest) return;
+			if (!quest || !quest->objectives) return;
+			wchar_t* str = quest->objectives;
+			UI::AsyncDecodeStr(str, &res);
+		}
+
+        void AsyncGetQuestLocation(const Quest* quest, std::wstring& res) {
+            if (!quest) return;
+            if (!quest || !quest->location) return;
+            wchar_t* str = quest->location;
+            UI::AsyncDecodeStr(str, &res);
+        }
+
+		void AsyncGetQuestNPC(const Quest* quest, std::wstring& res) {
+			if (!quest) return;
+			if (!quest || !quest->npc) return;
+			wchar_t* str = quest->npc;
+			UI::AsyncDecodeStr(str, &res);
+		}
+
     }
 
 } // namespace GW

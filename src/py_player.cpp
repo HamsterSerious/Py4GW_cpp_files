@@ -57,6 +57,7 @@ void PyPlayer::ResetContext() {
 	tournament_reward_points = 0;
 	morale = 0;
 	experience = 0;
+	level = 0;
 	current_kurzick = 0;
 	total_earned_kurzick = 0;
 	max_kurzick = 0;
@@ -71,6 +72,19 @@ void PyPlayer::ResetContext() {
 	max_balth = 0;
 	current_skill_points = 0;
 	total_earned_skill_points = 0;
+	party_morale.clear();
+	player_uuid = { 0, 0, 0, 0 };
+
+	missions_completed.clear();
+	missions_bonus.clear();
+	missions_completed_hm.clear();
+	missions_bonus_hm.clear();
+	controlled_minions.clear();
+	unlocked_map.clear();
+	learnable_character_skills.clear();
+	unlocked_character_skills.clear();
+
+
 }
 
 inline uint32_t PickHighestValid(uint32_t a, uint32_t b) {
@@ -124,6 +138,9 @@ void PyPlayer::GetContext() {
             if (char_context) {
                 std::wstring wplayer_email = char_context->player_email;
                 account_email = std::wstring_convert<std::codecvt_utf8<wchar_t>>().to_bytes(wplayer_email);
+				for (int i = 0; i < 4; ++i)
+                    player_uuid[i] = char_context->player_uuid[i];
+
             }
 
             wins = world_context->accountInfo->wins;
@@ -159,6 +176,7 @@ void PyPlayer::GetContext() {
 
 
             experience = PickHighestValid(world_context->experience, world_context->experience_dupe);
+			level = PickHighestValid(world_context->level, world_context->level_dupe);
             current_kurzick = PickHighestValid(world_context->current_kurzick, world_context->current_kurzick_dupe);
             total_earned_kurzick = PickHighestValid(world_context->total_earned_kurzick, world_context->total_earned_kurzick_dupe);
             max_kurzick = world_context->max_kurzick;
@@ -173,233 +191,160 @@ void PyPlayer::GetContext() {
             max_balth = world_context->max_balth;
             current_skill_points = PickHighestValid(world_context->current_skill_points, world_context->current_skill_points_dupe);
             total_earned_skill_points = PickHighestValid(world_context->total_earned_skill_points, world_context->total_earned_skill_points_dupe);
+
+            auto copy_uint_array = [](const GW::Array<uint32_t>& arr, std::vector<uint32_t>& out) {
+                out.assign(arr.begin(), arr.end());
+                };
+
+            // Missions
+            copy_uint_array(world_context->missions_completed, missions_completed);
+            copy_uint_array(world_context->missions_bonus, missions_bonus);
+            copy_uint_array(world_context->missions_completed_hm, missions_completed_hm);
+            copy_uint_array(world_context->missions_bonus_hm, missions_bonus_hm);
+
+            // Controlled minions — USE minion_count (not "count")
+            for (size_t i = 0; i < world_context->controlled_minion_count.size(); ++i) {
+                const auto& cm = world_context->controlled_minion_count[i];
+                controlled_minions.emplace_back(
+                    static_cast<int>(cm.agent_id),
+                    static_cast<int>(cm.minion_count)
+                );
+            }
+
+            // Map & skills
+            copy_uint_array(world_context->unlocked_map, unlocked_map);
+            copy_uint_array(world_context->learnable_character_skills, learnable_character_skills);
+            copy_uint_array(world_context->unlocked_character_skills, unlocked_character_skills);
+
         }
     }
 
 }
+
+template<typename FilterFn>
+std::vector<int> FilterAgents(FilterFn&& filter) {
+    std::vector<int> result;
+
+    const auto agents = GW::Agents::GetAgentArray();
+    if (!agents) return result;
+
+    const auto ac = GW::GetAgentContext();
+    if (!ac) return result;
+
+    for (const GW::Agent* agent : *agents) {
+        if (!agent)
+            continue;
+
+        uint32_t id = agent->agent_id;
+        if (!id)
+            continue;
+
+        //Stale pointer check
+        if (!(ac->agent_movement.size() > id &&
+            ac->agent_movement[id]))
+            continue;
+
+        //Execute your custom filter
+        if (!filter(agent))
+            continue;
+
+        result.push_back(static_cast<int>(id));
+    }
+
+    if (result.empty())
+        result.push_back(0);
+
+    return result;
+}
+
 
 std::vector<int> PyPlayer::GetAgentArray() {
-	std::vector<int> agent_ids = {};
-
-    const auto agents = GW::Agents::GetAgentArray();
-    if (!agents) return agent_ids;
-
-    for (const GW::Agent* agent : *agents) {
-        if (agent && agent->agent_id) {
-            agent_ids.push_back(static_cast<int>(agent->agent_id));
-        }
-    }
-    if (agent_ids.empty()) {
-        agent_ids.push_back(static_cast<int>(0));
-    }
-    return agent_ids;
+    return FilterAgents([](const GW::Agent* agent) {
+        return true; // accept all valid agents
+        });
 }
+
 
 std::vector<int> PyPlayer::GetAllyArray() {
-    std::vector<int> agent_ids = {};
-    
-    const auto agents = GW::Agents::GetAgentArray();
-    if (!agents) return agent_ids;
-
-    for (const GW::Agent* agent : *agents) {
-
-        int ally_id = 0;  
-        if (!agent) { continue; }
-        if (!agent->GetIsLivingType()) { continue; }
-        const auto living_agent = agent->GetAsAgentLiving();  
-        if (!living_agent) { continue; }
-        if (living_agent->allegiance != GW::Constants::Allegiance::Ally_NonAttackable) { continue; }
-
-        ally_id = living_agent->agent_id;  
-        agent_ids.push_back(static_cast<int>(ally_id));  
-    }
-
-	if (agent_ids.empty()) {
-        agent_ids.push_back(static_cast<int>(0));
-	}
-    return agent_ids;
+    return FilterAgents([](const GW::Agent* agent) {
+        if (!agent->GetIsLivingType()) return false;
+        const auto living = agent->GetAsAgentLiving();
+        return living && living->allegiance == GW::Constants::Allegiance::Ally_NonAttackable;
+        });
 }
 
+
 std::vector<int> PyPlayer::GetNeutralArray() {
-	std::vector<int> agent_ids = {};
-
-    const auto agents = GW::Agents::GetAgentArray();
-    if (!agents) return agent_ids;
-
-    for (const GW::Agent* agent : *agents) {
-        int neutral_id = 0;  // Changed AllyID to neutral_id
-        if (!agent) { continue; }
-        if (!agent->GetIsLivingType()) { continue; }
-        const auto living_agent = agent->GetAsAgentLiving();  // Changed tAllyLiving to living_agent
-        if (!living_agent) { continue; }
-        if (living_agent->allegiance != GW::Constants::Allegiance::Neutral) { continue; }
-
-        neutral_id = living_agent->agent_id;  // Changed tAllyLiving to living_agent and AllyID to neutral_id
-        agent_ids.push_back(static_cast<int>(neutral_id));  // Changed AllyID to neutral_id
-    }
-    if (agent_ids.empty()) {
-        agent_ids.push_back(static_cast<int>(0));
-    }
-    return agent_ids;
+    return FilterAgents([](const GW::Agent* agent) {
+        if (!agent->GetIsLivingType()) return false;
+        const auto living = agent->GetAsAgentLiving();
+        return living && living->allegiance == GW::Constants::Allegiance::Neutral;
+        });
 }
 
 
 std::vector<int> PyPlayer::GetEnemyArray() {
-	std::vector<int> agent_ids = {};
-
-    const auto agents = GW::Agents::GetAgentArray();
-    if (!agents) return agent_ids;
-
-    for (const GW::Agent* agent : *agents) {
-
-        int enemy_id = 0;  // Changed AllyID to enemy_id
-        if (!agent) { continue; }
-        if (!agent->GetIsLivingType()) { continue; }
-        const auto living_agent = agent->GetAsAgentLiving();  // Changed tAllyLiving to living_agent
-        if (!living_agent) { continue; }
-        if (living_agent->allegiance != GW::Constants::Allegiance::Enemy) { continue; }
-
-        enemy_id = living_agent->agent_id;  // Changed AllyID to enemy_id
-        agent_ids.push_back(static_cast<int>(enemy_id));  // Changed AllyID to enemy_id
-    }
-    if (agent_ids.empty()) {
-        agent_ids.push_back(static_cast<int>(0));
-    }
-    return agent_ids;
+    return FilterAgents([](const GW::Agent* agent) {
+        if (!agent->GetIsLivingType()) return false;
+        const auto living = agent->GetAsAgentLiving();
+        return living && living->allegiance == GW::Constants::Allegiance::Enemy;
+        });
 }
+
 
 std::vector<int> PyPlayer::GetSpiritPetArray() {
-	std::vector<int> agent_ids = {};
-
-    const auto agents = GW::Agents::GetAgentArray();
-    if (!agents) return agent_ids;
-
-    for (const GW::Agent* agent : *agents) {
-
-        int spirit_pet_id = 0;  // Changed AllyID to spirit_pet_id
-        if (!agent) { continue; }
-        if (!agent->GetIsLivingType()) { continue; }
-        const auto living_agent = agent->GetAsAgentLiving();  // Changed tAllyLiving to living_agent
-        if (!living_agent) { continue; }
-        if (living_agent->allegiance != GW::Constants::Allegiance::Spirit_Pet) { continue; }
-
-        spirit_pet_id = living_agent->agent_id;  // Changed AllyID to spirit_pet_id
-        agent_ids.push_back(static_cast<int>(spirit_pet_id));  // Changed AllyID to spirit_pet_id
-    }
-    if (agent_ids.empty()) {
-        agent_ids.push_back(static_cast<int>(0));
-    }
-    return agent_ids;
+    return FilterAgents([](const GW::Agent* agent) {
+        if (!agent->GetIsLivingType()) return false;
+        const auto living = agent->GetAsAgentLiving();
+        return living && living->allegiance == GW::Constants::Allegiance::Spirit_Pet;
+        });
 }
+
 
 std::vector<int> PyPlayer::GetMinionArray() {
-	std::vector<int> agent_ids = {};
-
-    const auto agents = GW::Agents::GetAgentArray();
-    if (!agents) return agent_ids;
-
-    for (const GW::Agent* agent : *agents) {
-
-        int minion_id = 0;  // Changed AllyID to minion_id
-        if (!agent) { continue; }
-        if (!agent->GetIsLivingType()) { continue; }
-        const auto living_agent = agent->GetAsAgentLiving();  // Changed tAllyLiving to living_agent
-        if (!living_agent) { continue; }
-        if (living_agent->allegiance != GW::Constants::Allegiance::Minion) { continue; }
-
-        minion_id = living_agent->agent_id;  // Changed AllyID to minion_id
-        agent_ids.push_back(static_cast<int>(minion_id));  // Changed AllyID to minion_id
-    }
-    if (agent_ids.empty()) {
-        agent_ids.push_back(static_cast<int>(0));
-    }
-    return agent_ids;
+    return FilterAgents([](const GW::Agent* agent) {
+        if (!agent->GetIsLivingType()) return false;
+        const auto living = agent->GetAsAgentLiving();
+        return living && living->allegiance == GW::Constants::Allegiance::Minion;
+        });
 }
+
 
 std::vector<int> PyPlayer::GetNPCMinipetArray() {
-	std::vector<int> agent_ids = {};
-
-    const auto agents = GW::Agents::GetAgentArray();
-    if (!agents) return agent_ids;
-
-    for (const GW::Agent* agent : *agents) {
-
-        int npc_minipet_id = 0;  // Changed AllyID to npc_minipet_id
-        if (!agent) { continue; }
-        if (!agent->GetIsLivingType()) { continue; }
-        const auto living_agent = agent->GetAsAgentLiving();  // Changed tAllyLiving to living_agent
-        if (!living_agent) { continue; }
-        if (living_agent->allegiance != GW::Constants::Allegiance::Npc_Minipet) { continue; }
-
-        npc_minipet_id = living_agent->agent_id;  // Changed AllyID to npc_minipet_id
-        agent_ids.push_back(static_cast<int>(npc_minipet_id));  // Changed AllyID to npc_minipet_id
-    }
-    if (agent_ids.empty()) {
-        agent_ids.push_back(static_cast<int>(0));
-    }
-    return agent_ids;
+    return FilterAgents([](const GW::Agent* agent) {
+        if (!agent->GetIsLivingType()) return false;
+        const auto living = agent->GetAsAgentLiving();
+        return living && living->allegiance == GW::Constants::Allegiance::Npc_Minipet;
+        });
 }
+
 
 std::vector<int> PyPlayer::GetItemArray() {
-	std::vector<int> agent_ids = {};
-    const auto agents = GW::Agents::GetAgentArray();
-    if (!agents) return agent_ids;  // Return an empty vector if there are no agents
-
-    for (const GW::Agent* agent : *agents) {
-        if (!(agent && agent->GetIsItemType())) continue;  // Skip non-item agents
-
-        const auto agent_item = agent->GetAsAgentItem();
-        if (!(agent_item && agent_item->agent_id)) continue;  // Skip invalid item agents
-
-        uint32_t item_id = agent_item->agent_id;  // Get the item agent ID
-
-		if (item_id == 0) continue;  // Skip invalid item IDs
-
-        // Add the valid item ID to the list
-        agent_ids.push_back(static_cast<int>(item_id));
-    }
-    return agent_ids;
+    return FilterAgents([](const GW::Agent* agent) {
+        if (!agent->GetIsItemType()) return false;
+        const auto item = agent->GetAsAgentItem();
+        return item && item->agent_id;
+        });
 }
+
 
 std::vector<int> PyPlayer::GetOwnedItemArray(int owner_agent_id) {
-    std::vector<int> agent_ids = {};
-	GW::Agent* agent = GW::Agents::GetAgentByID(owner_agent_id);
-	if (!agent) return agent_ids;  // Return an empty vector if the agent is invalid
-    
-    const auto agents = GW::Agents::GetAgentArray();
-    if (!agents) return agent_ids;  // Return an empty vector if there are no agents
-
-    for (const GW::Agent* agent : *agents) {
-        if (!(agent && agent->GetIsItemType())) continue;  // Skip non-item agents
-
-        const auto agent_item = agent->GetAsAgentItem();
-        if (!(agent_item && agent_item->agent_id)) continue;  // Skip invalid item agents
-        
-		if (agent_item->owner == owner_agent_id)
-			agent_ids.push_back(static_cast<int>(agent_item->agent_id));
-       
-    }
-    return agent_ids;
+    return FilterAgents([owner_agent_id](const GW::Agent* agent) {
+        if (!agent->GetIsItemType()) return false;
+        const auto item = agent->GetAsAgentItem();
+        return item && item->owner == owner_agent_id;
+        });
 }
+
 
 std::vector<int> PyPlayer::GetGadgetArray() {
-	std::vector<int> agent_ids = {};
-    const auto agents = GW::Agents::GetAgentArray();
-    if (!agents) return agent_ids;  // Check if the agents array is null
-
-    for (const GW::Agent* agent : *agents) {
-        if (!agent || !agent->GetIsGadgetType()) continue;  // Skip null and non-gadget agents
-
-        const auto agent_gadget = agent->GetAsAgentGadget();
-        if (!agent_gadget || !agent_gadget->agent_id) continue;  // Skip invalid gadgets
-
-        agent_ids.push_back(static_cast<int>(agent_gadget->agent_id));  // Add valid gadget ID
-    }
-    if (agent_ids.empty()) {
-        agent_ids.push_back(static_cast<int>(0));
-    }
-    return agent_ids;
+    return FilterAgents([](const GW::Agent* agent) {
+        if (!agent->GetIsGadgetType()) return false;
+        const auto gadget = agent->GetAsAgentGadget();
+        return gadget && gadget->agent_id;
+        });
 }
+
 
 std::string local_player_WStringToString(const std::wstring& s) {
     // @Cleanup: ASSERT used incorrectly here; value passed could be from anywhere!
@@ -522,9 +467,11 @@ bool PyPlayer::ChangeTarget(uint32_t new_target_id) {
     auto agent = GW::Agents::GetAgentByID(new_target_id);
     if (!agent) return false;
 
-    GW::GameThread::Enqueue([agent] {
-        GW::Agents::ChangeTarget(agent);;
-        });
+    GW::GameThread::Enqueue([agent, new_target_id] {
+        if (GW::Agent* a = GW::Agents::GetAgentByID(new_target_id)) {
+            GW::Agents::ChangeTarget(agent);
+        }
+    });
     return true;
 }
 
@@ -547,12 +494,12 @@ bool PyPlayer::Move(float x, float y) {
 }
 
 bool PyPlayer::InteractAgent(int agent_id, bool call_target) {
-	if (agent_id == 0) return false;
+    if (agent_id == 0) return false;
 
-    GW::Agent* agent = GW::Agents::GetAgentByID(agent_id);
-    if (!agent) return false;
-    GW::GameThread::Enqueue([agent, call_target] {
-        GW::Agents::InteractAgent(agent, call_target);;
+    GW::GameThread::Enqueue([agent_id, call_target] {
+        if (GW::Agent* a = GW::Agents::GetAgentByID(agent_id)) {
+            GW::Agents::InteractAgent(a, call_target);
+        }
         });
     return true;
 }
@@ -585,6 +532,9 @@ uint32_t PyPlayer::GetActiveTitleId() {
 	return static_cast<uint32_t>(GW::PlayerMgr::GetActiveTitleId());
 }
 
+std::vector<int> PyPlayer::GetTitleArray() {
+	return GW::PlayerMgr::GetTitleIDs();   
+}
 
 
 namespace GW {
@@ -756,6 +706,8 @@ bool PyPlayer::IsAgentIDValid(int agent_id) {
 	return true;
 }
 
+
+
 void BindPyTitle(py::module_& m) {
     py::class_<PyTitle>(m, "PyTitle")
         .def(py::init<uint32_t>(), py::arg("title_id"))  // Constructor with title_id
@@ -837,6 +789,7 @@ void BindPyPlayer(py::module_& m) {
         .def("RemoveActiveTitle", &PyPlayer::RemoveActiveTitle)  // Bind the RemoveActiveTitle method
         .def("DepositFaction", &PyPlayer::DepositFaction, py::arg("allegiance"))  // Bind the DepositFaction method
         .def("GetActiveTitleId", &PyPlayer::GetActiveTitleId)  // Bind the GetActiveTitleId method
+		.def("GetTitleArray", &PyPlayer::GetTitleArray)  // Bind the GetTitleArray method
 
         // Bind public attributes with snake_case naming convention
         .def_readonly("id", &PyPlayer::id)  // Bind the id attribute
@@ -846,6 +799,7 @@ void BindPyPlayer(py::module_& m) {
         .def_readonly("observing_id", &PyPlayer::observing_id)  // Bind the observing_id attribute
         .def_readonly("account_name", &PyPlayer::account_name) // Bind the account_name attribute
         .def_readonly("account_email", &PyPlayer::account_email)  // Bind the account_email attribute
+		.def_readonly("player_uuid", &PyPlayer::player_uuid)  // Bind the player_uuid attribute
         .def_readonly("wins", &PyPlayer::wins)  // Bind the wins attribute
         .def_readonly("losses", &PyPlayer::losses)  // Bind the losses attribute
         .def_readonly("rating", &PyPlayer::rating)  // Bind the rating attribute
@@ -855,6 +809,7 @@ void BindPyPlayer(py::module_& m) {
         .def_readonly("morale", &PyPlayer::morale)  // Bind the morale attribute
 		.def_readonly("party_morale", &PyPlayer::party_morale)  // Bind the party_morale attribute
         .def_readonly("experience", &PyPlayer::experience)  // Bind the experience attribute
+		.def_readonly("level", &PyPlayer::level)  // Bind the level attribute
         .def_readonly("current_kurzick", &PyPlayer::current_kurzick)  // Bind the current_kurzick attribute
         .def_readonly("total_earned_kurzick", &PyPlayer::total_earned_kurzick)  // Bind the total_earned_kurzick attribute
         .def_readonly("max_kurzick", &PyPlayer::max_kurzick) // Bind the max_kurzick attribute
@@ -869,6 +824,14 @@ void BindPyPlayer(py::module_& m) {
         .def_readonly("max_balth", &PyPlayer::max_balth)  // Bind the max_balth attribute
         .def_readonly("current_skill_points", &PyPlayer::current_skill_points)  // Bind the current_skill_points attribute
         .def_readonly("total_earned_skill_points", &PyPlayer::total_earned_skill_points)  // Bind the total_earned_skill_points attribute
+		.def_readonly("missions_completed", &PyPlayer::missions_completed)  // Bind the missions_completed attribute
+		.def_readonly("missions_bonus", &PyPlayer::missions_bonus)  // Bind the missions_bonus attribute
+		.def_readonly("missions_completed_hm", &PyPlayer::missions_completed_hm)  // Bind the missions_completed_hm attribute
+		.def_readonly("missions_bonus_hm", &PyPlayer::missions_bonus_hm)  // Bind the missions_bonus_hm attribute
+		.def_readonly("controlled_minions", &PyPlayer::controlled_minions) // Bind the controlled_minions attribute
+		.def_readonly("unlocked_maps", &PyPlayer::unlocked_map)  // Bind the unlocked_maps attribute
+		.def_readonly("learnable_character_skills", &PyPlayer::learnable_character_skills)  // Bind the learnable_character_skills attribute
+		.def_readonly("unlocked_character_skills", &PyPlayer::unlocked_character_skills)  // Bind the unlocked_character_skills attribute
 
         .def_static("LogouttoCharacterSelect", &LogouttoCharacterSelect) // Bind the LogouttoCharacterSelect method
         .def_static("GetIsCharacterSelectReady", &GetIsCharacterSelectReady) // Bind the GetIsCharacterSelectReady method

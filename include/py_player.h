@@ -17,6 +17,7 @@ public:
     uint32_t qualifier_points = 0;
     uint32_t rank = 0;
     uint32_t tournament_reward_points = 0;
+	uint32_t level = 0;
 
 	uint32_t morale = 0;
 	uint32_t experience = 0;
@@ -35,6 +36,15 @@ public:
     uint32_t current_skill_points;
     uint32_t total_earned_skill_points;
     std::vector<std::pair<int, int>> party_morale;
+	std::array<uint32_t, 4> player_uuid = { 0, 0, 0, 0 };
+    std::vector<uint32_t> missions_completed;
+    std::vector<uint32_t> missions_bonus;
+	std::vector<uint32_t> missions_completed_hm;
+	std::vector<uint32_t> missions_bonus_hm;
+	std::vector<std::pair<int, int>> controlled_minions;
+	std::vector<uint32_t> unlocked_map;
+	std::vector<uint32_t> learnable_character_skills;
+	std::vector<uint32_t> unlocked_character_skills;
 
 
 
@@ -73,6 +83,7 @@ public:
     bool RemoveActiveTitle();
     bool DepositFaction(uint32_t allegiance);
     uint32_t GetActiveTitleId();
+	std::vector<int> GetTitleArray();
 	bool IsAgentIDValid(int agent_id);
 
     

@@ -54,6 +54,7 @@ public:
         disabled = player_skillbar->disabled;
         casting = player_skillbar->casting;
 
+
         skills.clear();
         for (int i = 0; i < 8; ++i) {
             SkillID skill_id(static_cast<int>(player_skillbar->skills[i].skill_id));
@@ -81,6 +82,22 @@ public:
     bool LoadHeroSkillTemplate(uint32_t hero_index, std::string skill_template) {
         return GW::SkillbarMgr::LoadSkillTemplate(skill_template.c_str(), hero_index);
     }
+
+    /*void UseSkill(uint32_t slot, uint32_t target = 0) {
+
+        if (slot < 1 || slot > 8) {
+            throw std::out_of_range("Skill index out of range (must be between 1 and 8) Given: " + std::to_string(slot));
+        }
+        uint32_t zeroslot = slot - 1;
+
+        GW::GameThread::Enqueue([zeroslot, target] {
+            if (GW::Agent* a = GW::Agents::GetAgentByID(target)) {
+                GW::SkillbarMgr::UseSkill(zeroslot, target);
+            }
+        });
+
+    }
+    */
 
     void UseSkill(uint32_t slot, uint32_t target = 0) {
 

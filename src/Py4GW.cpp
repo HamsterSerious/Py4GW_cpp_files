@@ -1627,6 +1627,7 @@ void SetWindowGeometry(int x, int y, int width, int height) {
     const HWND hwnd = GW::MemoryMgr::GetGWWindowHandle();
     if (!hwnd) return;
 
+    /*
     RECT rect;
     GetWindowRect(hwnd, &rect);
 
@@ -1635,7 +1636,22 @@ void SetWindowGeometry(int x, int y, int width, int height) {
     if (width < 0)  width = rect.right - rect.left;
     if (height < 0) height = rect.bottom - rect.top;
 
-    MoveWindow(hwnd, x, y, width, height, TRUE);
+    MoveWindow(hwnd, x, y, width, height, TRUE);*/
+
+    RECT rect = { x, y, x + width, y + height };
+    DWORD style = GetWindowLong(hwnd, GWL_STYLE);
+    DWORD exstyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+
+    AdjustWindowRectEx(&rect, style, FALSE, exstyle);
+
+	auto x_delta = 
+
+    MoveWindow(hwnd,
+        x-8, //rect.left,
+        y,
+        rect.right - rect.left,
+        height+8,  //rect.bottom - rect.top,
+        TRUE);
 }
 
 
@@ -1657,33 +1673,38 @@ std::tuple<int, int, int, int> GetClientRectFn() {
 	return { 0, 0, 0, 0 };
 }
 
-void SetWindowTitle(const std::string& title) {
+
+void SetWindowTitle(const std::wstring& title) {
     HWND hwnd = GW::MemoryMgr::GetGWWindowHandle();
-    if (!hwnd || title.empty()) return;
+    if (!hwnd) return;
 
-    // Step 1: update the window title buffer
-    SendMessageA(hwnd, WM_SETTEXT, 0, (LPARAM)title.c_str());
+    // Show the exact wide string you received (we already did this before)
+    // MessageBoxW(nullptr, title.c_str(), L"DEBUG: Received Title", MB_OK);
 
-    // Step 2: force Windows to redraw the caption itself
-    SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
-        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+    SetWindowTextW(hwnd, title.c_str());
 
-    HDC hdc = GetWindowDC(hwnd);
-    if (hdc) {
-        RECT rect;
-        GetWindowRect(hwnd, &rect);
-        OffsetRect(&rect, -rect.left, -rect.top); // normalize to (0,0)
-        // Ask Windows to draw the caption using its buffer
-        DrawCaption(hwnd, hdc, &rect, DC_TEXT);
-        ReleaseDC(hwnd, hdc);
-    }
-
-    // Step 3: read back for confirmation
-    char buf[256] = { 0 };
-    GetWindowTextA(hwnd, buf, sizeof(buf));
-    MessageBoxA(nullptr, buf, "After Set + Redraw", MB_OK);
+    // Probe what actually got stored (ANSI path)
+    //ProbeCaptionStorage(hwnd);
 }
 
+void SetWindowActive() {
+	const HWND hwnd = GW::MemoryMgr::GetGWWindowHandle();
+	if (!hwnd) return;
+	SetForegroundWindow(hwnd);
+	SetFocus(hwnd);
+	SetActiveWindow(hwnd);
+}
+
+void SetAlwaysOnTop(bool enable) {
+    const HWND hwnd = GW::MemoryMgr::GetGWWindowHandle();
+    if (!hwnd) return;
+    SetWindowPos(hwnd, enable ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+}
+
+bool IsWindowFocused() {
+    return GW::MemoryMgr::GetGWWindowHandle() == GetFocus();
+}
 
 bool IsWindowActive() {
     return GW::MemoryMgr::GetGWWindowHandle() == GetActiveWindow();
@@ -1699,25 +1720,317 @@ bool IsWindowInBackground() {
     return hwnd && GetActiveWindow() != hwnd;
 }
 
-void SetBorderless(bool enable) {
+
+static bool   g_borderless_applied = false;
+static LONG   g_saved_style = 0;
+static LONG   g_saved_exstyle = 0;
+static RECT   g_saved_rect{};
+
+#ifndef GET_X_LPARAM
+#define GET_X_LPARAM(lp) ((int)(short)LOWORD(lp))
+#endif
+#ifndef GET_Y_LPARAM
+#define GET_Y_LPARAM(lp) ((int)(short)HIWORD(lp))
+#endif
+
+static void ApplyFrameChange(HWND hwnd) {
+    // Force non-client to recalc
+    SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+}
+
+// ==== True borderless (AHK-style) ====
+// Works by subclassing the window and suppressing the non-client area.
+// Tested pattern for legacy/32-bit apps that ignore style changes.
+
+#include <windows.h>
+
+struct BorderlessState {
+    BOOL   enabled = FALSE;
+    BOOL   draggable = TRUE;
+    int    resize_px = 8;   // border width for resize hit-test
+    WNDPROC orig_proc = nullptr;
+};
+
+static const wchar_t* kPropName = L"BL_STATE_PTR";
+
+// Helpers to attach/detach state
+static BorderlessState* GetState(HWND h) {
+    return reinterpret_cast<BorderlessState*>(GetPropW(h, kPropName));
+}
+static void SetState(HWND h, BorderlessState* s) {
+    if (s) SetPropW(h, kPropName, reinterpret_cast<HANDLE>(s));
+    else RemovePropW(h, kPropName);
+}
+
+// Optional: emulate resize/move on NCHITTEST
+static LRESULT HitTestBorderless(HWND h, BorderlessState* st, LPARAM lParam)
+{
+    if (!st || !st->draggable) return HTCLIENT;
+
+    // Screen client coords
+    POINT pt_screen{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+    POINT pt_client = pt_screen;
+    ScreenToClient(h, &pt_client);
+
+    RECT rc_client{};
+    GetClientRect(h, &rc_client);
+    const int w = rc_client.right - rc_client.left;
+    const int hgt = rc_client.bottom - rc_client.top;
+
+    const int x = pt_client.x;
+    const int y = pt_client.y;
+    const int border = (st->resize_px > 0 ? st->resize_px : 8);
+
+    // If maximized, don't offer resize edges
+    if (IsZoomed(h)) {
+        return HTCAPTION; // drag anywhere
+    }
+
+    const bool left = (x >= 0 && x < border);
+    const bool right = (x <= w && x > w - border);
+    const bool top = (y >= 0 && y < border);
+    const bool bottom = (y <= hgt && y > hgt - border);
+
+    if (top && left)     return HTTOPLEFT;
+    if (top && right)    return HTTOPRIGHT;
+    if (bottom && left)  return HTBOTTOMLEFT;
+    if (bottom && right) return HTBOTTOMRIGHT;
+    if (top)             return HTTOP;
+    if (bottom)          return HTBOTTOM;
+    if (left)            return HTLEFT;
+    if (right)           return HTRIGHT;
+
+    return HTCAPTION; // drag everywhere else
+}
+
+
+static LRESULT CALLBACK BorderlessProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    BorderlessState* st = GetState(hwnd);
+
+    // If state missing or disabled, pass to original immediately
+    if (!st || !st->enabled) {
+        WNDPROC orig = st ? st->orig_proc : reinterpret_cast<WNDPROC>(GetWindowLongPtr(hwnd, GWLP_WNDPROC));
+        return CallWindowProc(orig, hwnd, msg, wParam, lParam);
+    }
+
+    switch (msg) {
+    case WM_NCCALCSIZE:
+        // Return 0 to tell Windows the whole window is client area (no title/borders).
+        if (wParam) return 0;
+        return 0;
+
+    case WM_NCPAINT:
+        // Suppress default non-client painting (title bar, borders).
+        return 0;
+
+    case WM_NCACTIVATE:
+        // Prevent Windows from drawing inactive/active titlebar transitions.
+        return TRUE;
+
+    case WM_STYLECHANGING:
+        // Keep borderless look by stripping frame bits if the app tries to add them.
+        if (wParam == GWL_STYLE) {
+            STYLESTRUCT* ss = reinterpret_cast<STYLESTRUCT*>(lParam);
+            ss->styleNew &= ~(WS_CAPTION | WS_THICKFRAME | WS_MINIMIZE | WS_MAXIMIZE | WS_SYSMENU);
+        }
+        break;
+
+    case WM_NCHITTEST:
+        return HitTestBorderless(hwnd, st, lParam);
+
+    case WM_DESTROY:
+    case WM_NCDESTROY:
+        // Clean up our state when the window is going away
+        if (st && st->orig_proc) {
+            SetWindowLongPtr(hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(st->orig_proc));
+        }
+        SetState(hwnd, nullptr);
+        delete st;
+        break;
+    }
+    return CallWindowProc(st->orig_proc, hwnd, msg, wParam, lParam);
+}
+
+// Public API: enable/disable true borderless
+// draggable=true -> window can be dragged by client area; resize via edges (resize_px).
+// After enabling/disabling, we force a frame change so Windows recalculates immediately.
+bool EnableTrueBorderless(HWND hwnd, bool enable, bool draggable = true, int resize_px = 8) {
+    if (!IsWindow(hwnd)) return false;
+
+    BorderlessState* st = GetState(hwnd);
+
+    if (enable) {
+        if (!st) {
+            st = new BorderlessState();
+            st->enabled = TRUE;
+            st->draggable = draggable ? TRUE : FALSE;
+            st->resize_px = (resize_px > 0 ? resize_px : 8);
+            st->orig_proc = reinterpret_cast<WNDPROC>(GetWindowLongPtr(hwnd, GWLP_WNDPROC));
+            SetState(hwnd, st);
+            SetWindowLongPtr(hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(BorderlessProc));
+        }
+        else {
+            st->enabled = TRUE;
+            st->draggable = draggable ? TRUE : FALSE;
+            st->resize_px = (resize_px > 0 ? resize_px : 8);
+        }
+
+        // Remove menu if any (some legacy apps use the menu to force a caption)
+        SetMenu(hwnd, NULL);
+
+        // Force re-evaluation of the frame
+        SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+        return true;
+    }
+    else {
+        if (st) {
+            // restore original proc
+            if (st->orig_proc) {
+                SetWindowLongPtr(hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(st->orig_proc));
+            }
+            SetState(hwnd, nullptr);
+            delete st;
+            // Force re-evaluation so the normal frame comes back
+            SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+            return true;
+        }
+        return false;
+    }
+}
+
+void SetBorderless(bool enable)
+{
+    bool draggable = false;
+    int resize_px = 8;
     const HWND hwnd = GW::MemoryMgr::GetGWWindowHandle();
     if (!hwnd) return;
 
-    LONG style = GetWindowLong(hwnd, GWL_STYLE);
+    // Use the robust subclass-based borderless approach
+    EnableTrueBorderless(hwnd, enable, draggable, resize_px);
+}
 
+
+
+// Flash the taskbar button and optionally the window caption to get attention
+void Flash_Window(int repeat_count = 1) {
+    const HWND hwnd = GW::MemoryMgr::GetGWWindowHandle();
+    if (!hwnd) return;
+
+    FLASHWINFO fw = { 0 };
+    fw.cbSize = sizeof(fw);
+    fw.hwnd = hwnd;
+    fw.dwFlags = FLASHW_TRAY;    // flash only taskbar button
+	fw.uCount = repeat_count;   
+    fw.dwTimeout = 0;
+    FlashWindowEx(&fw);
+}
+
+// Keep flashing until the window comes to foreground
+void RequestAttention() {
+    const HWND hwnd = GW::MemoryMgr::GetGWWindowHandle();
+    if (!hwnd) return;
+
+    FLASHWINFO fw = { 0 };
+    fw.cbSize = sizeof(fw);
+    fw.hwnd = hwnd;
+    fw.dwFlags = FLASHW_TRAY | FLASHW_TIMERNOFG;  // until foreground
+    fw.uCount = UINT_MAX;
+    fw.dwTimeout = 0;
+    FlashWindowEx(&fw);
+}
+
+// Get current Z-order index (lower index = closer to top)
+int GetZOrder() {
+    const HWND hwnd = GW::MemoryMgr::GetGWWindowHandle();
+    if (!hwnd) return -1;
+
+    int z = 0;
+    for (HWND h = hwnd; h != NULL; h = GetWindow(h, GW_HWNDPREV)) {
+        z++;
+    }
+    return z;
+}
+
+// Set explicit Z-order relative to another window
+void SetZOrder(int insertAfter) {
+    const HWND hwnd = GW::MemoryMgr::GetGWWindowHandle();
+    if (!hwnd) return;
+
+    SetWindowPos(
+        hwnd,
+        (HWND)insertAfter, // cast int back to HWND
+        0, 0, 0, 0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
+    );
+}
+
+
+// Push window to bottom of Z-order stack
+void SendWindowToBack() {
+    SetZOrder((int)HWND_BOTTOM);
+}
+
+void BringWindowToFront() {
+    SetZOrder((int)HWND_TOP);
+}
+
+
+// Make the window transparent to mouse clicks (click-through) and/or normal
+void TransparentClickThrough(bool enable) {
+    const HWND hwnd = GW::MemoryMgr::GetGWWindowHandle();
+    if (!hwnd) return;
+
+    LONG exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
     if (enable) {
-        style &= ~(WS_CAPTION | WS_THICKFRAME | WS_MINIMIZE | WS_MAXIMIZE | WS_SYSMENU);
+        exStyle |= WS_EX_TRANSPARENT | WS_EX_LAYERED;
     }
     else {
-        style |= (WS_CAPTION | WS_THICKFRAME | WS_MINIMIZE | WS_MAXIMIZE | WS_SYSMENU);
+        exStyle &= ~WS_EX_TRANSPARENT;
+    }
+    SetWindowLong(hwnd, GWL_EXSTYLE, exStyle);
+    // required to apply
+    SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+}
+
+// Adjust window opacity [0–255]
+void AdjustWindowOpacity(int alpha) {
+    auto ALPHA_BYTE = [](int value) -> BYTE {
+        if (value < 0) return 0;
+        if (value > 255) return 255;
+        return static_cast<BYTE>(value);
+        };
+
+    const HWND hwnd = GW::MemoryMgr::GetGWWindowHandle();
+    if (!hwnd) return;
+
+    LONG exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+    if (!(exStyle & WS_EX_LAYERED)) {
+        SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
     }
 
-    SetWindowLong(hwnd, GWL_STYLE, style);
-
-    // apply changes
-    SetWindowPos(hwnd, NULL, 0, 0, 0, 0,
-        SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
+    BYTE clamped = ALPHA_BYTE(alpha);
+    SetLayeredWindowAttributes(hwnd, 0, clamped, LWA_ALPHA);
 }
+
+
+// Hide the window (makes it invisible, still running)
+void HideWindow() {
+    const HWND hwnd = GW::MemoryMgr::GetGWWindowHandle();
+    if (!hwnd) return;
+    ShowWindow(hwnd, SW_HIDE);
+}
+
+// Show the window if hidden
+void ShowWindowAgain() {
+    const HWND hwnd = GW::MemoryMgr::GetGWWindowHandle();
+    if (!hwnd) return;
+    ShowWindow(hwnd, SW_SHOW);
+}
+
 
 
 
@@ -1766,6 +2079,7 @@ PYBIND11_EMBEDDED_MODULE(Py4GW, m)
 
     console.def("GetCredits", &GetCredits, "Get the credits for the Py4GW library");
     console.def("GetLicense", &GetLicense, "Get the license for the Py4GW library");
+	console.def("change_working_directory", &ChangeWorkingDirectory, "Change the current working directory", py::arg("path"));
 
     //get_gw_window_handle
     console.def("get_gw_window_handle", []() -> uintptr_t {
@@ -1782,15 +2096,33 @@ PYBIND11_EMBEDDED_MODULE(Py4GW, m)
 	console.def("set_window_geometry", &SetWindowGeometry, "Set the Guild Wars window geometry (x, y, width, height). Use -1 to keep current value.", py::arg("x"), py::arg("y"), py::arg("width"), py::arg("height"));
 	console.def("get_window_rect", &GetWindowRectFn, "Get the Guild Wars window rectangle (left, top, right, bottom)");
 	console.def("get_client_rect", &GetClientRectFn, "Get the Guild Wars client rectangle (left, top, right, bottom)");
-    console.def("set_window_title", [](py::str s) {
-        std::string w = py::cast<std::string>(s); // Python str -> wstring
-        SetWindowTitle(w);
+	console.def("set_window_active", &SetWindowActive, "Set the Guild Wars window as active (focused)");
+    console.def("set_window_title", [](const std::wstring& s) {
+        SetWindowTitle(s);
         }, py::arg("title"));
  
 	console.def("is_window_active", &IsWindowActive, "Check if the Guild Wars window is active (focused)");
 	console.def("is_window_minimized", &IsWindowMinimized, "Check if the Guild Wars window is minimized");
 	console.def("is_window_in_background", &IsWindowInBackground, "Check if the Guild Wars window is in the background (not focused)");
 	console.def("set_borderless", &SetBorderless, "Enable or disable borderless window mode for Guild Wars", py::arg("enable"));
+	console.def("set_always_on_top", &SetAlwaysOnTop, "Set or unset the Guild Wars window to be always on top", py::arg("enable"));
+	console.def("flash_window", &Flash_Window, "Flash the Guild Wars taskbar button to get attention", py::arg("repeat_count") = 1);
+	console.def("request_attention", &RequestAttention, "Keep flashing the Guild Wars taskbar button until it comes to foreground");
+	console.def("get_z_order", &GetZOrder, "Get the Z-order index of the Guild Wars window (lower index = closer to top)");
+    console.def(
+        "set_z_order",
+        &SetZOrder,
+        "Set the Z-order of the Guild Wars window relative to another window (default: top)",
+        py::arg("insert_after") = (int)HWND_TOP
+    );
+
+	console.def("send_window_to_back", &SendWindowToBack, "Send the Guild Wars window to the bottom of the Z-order stack");
+	console.def("bring_window_to_front", &BringWindowToFront, "Bring the Guild Wars window to the front of the Z-order stack");
+	console.def("transparent_click_through", &TransparentClickThrough, "Make the Guild Wars window transparent to mouse clicks (click-through)", py::arg("enable"));
+	console.def("adjust_window_opacity", &AdjustWindowOpacity, "Adjust the Guild Wars window opacity (0-255)", py::arg("alpha"));
+	console.def("hide_window", &HideWindow, "Hide the Guild Wars window (makes it invisible, still running)");
+	console.def("show_window", &ShowWindowAgain, "Show the Guild Wars window if hidden");
+
 
     // === Script Control Bindings ===
     console.def("load", &Py4GW_LoadScript, "Load a Python script from path", py::arg("path"));

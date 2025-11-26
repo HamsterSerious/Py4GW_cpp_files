@@ -207,6 +207,7 @@ public:
     int value = 0;
     uint32_t interaction;
     uint32_t model_id;
+	uint32_t model_file_id;
     int item_formula = 0;
     int is_material_salvageable = 0;
     int quantity = 0;

@@ -707,6 +707,7 @@ void ImGui_TableSetColumnIndex(int column_index) {
     ImGui::TableSetColumnIndex(column_index);
 }
 
+
 void ImGui_SetColumnWidth(int column_index, float width) {
 	ImGui::SetColumnWidth(column_index, width);
 }

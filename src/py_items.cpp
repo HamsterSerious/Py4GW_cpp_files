@@ -304,6 +304,7 @@ void SafeItem::ResetContext() {
 	value = 0;
 	interaction = 0;
 	model_id = 0;
+	model_file_id = 0;
 	item_formula = 0;
 	is_material_salvageable = false;
 	quantity = 0;
@@ -372,6 +373,7 @@ void SafeItem::GetContext() {
     value = item->value;
     interaction = item->interaction;
     model_id = item->model_id;
+	model_file_id = item->model_file_id;
     item_formula = item->item_formula;
     is_material_salvageable = item->is_material_salvageable;
     quantity = item->quantity;
@@ -434,8 +436,9 @@ std::string custom_WStringToString(const std::wstring& s)
     // Remove the null terminator at the end (since WideCharToMultiByte includes it)
     strTo.resize(size_needed - 1);
 
-    std::regex tagPattern(R"(<[^>]*>)");
-    return std::regex_replace(strTo, tagPattern, "");
+    // std::regex tagPattern(R"(<[^>]*>)");
+        // return std::regex_replace(strTo, tagPattern, "");
+    return strTo;
 
 }
 
@@ -648,6 +651,7 @@ void bind_SafeItem(py::module_& m) {
         .def_readonly("value", &SafeItem::value)
         .def_readonly("interaction", &SafeItem::interaction)
         .def_readonly("model_id", &SafeItem::model_id)
+		.def_readonly("model_file_id", &SafeItem::model_file_id)
         .def_readonly("item_formula", &SafeItem::item_formula)
         .def_readonly("is_material_salvageable", &SafeItem::is_material_salvageable)
         .def_readonly("quantity", &SafeItem::quantity)

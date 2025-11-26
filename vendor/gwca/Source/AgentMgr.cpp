@@ -322,8 +322,21 @@ namespace GW {
         }
 
         Agent* GetAgentByID(uint32_t agent_id) {
+            /*old code*/
+            //auto* agents = agent_id ? GetAgentArray() : nullptr;
+            //return agents && agent_id < agents->size() ? agents->at(agent_id) : nullptr;
+
             auto* agents = agent_id ? GetAgentArray() : nullptr;
-            return agents && agent_id < agents->size() ? agents->at(agent_id) : nullptr;
+            Agent* agent = agents && agent_id < agents->size() ? agents->at(agent_id) : nullptr;
+            if (!agent) return nullptr;
+
+            const auto ac = GW::GetAgentContext();
+            if (!(ac->agent_movement.size() > agent->agent_id &&
+                ac->agent_movement[agent->agent_id]))
+                return nullptr;
+
+            return agent;
+
         }
 
         Agent* GetPlayerByID(uint32_t player_id) {
@@ -371,6 +384,7 @@ namespace GW {
             packet.action_id = WorldActionId::InteractPlayerOrOther;
             return UI::SendUIMessage(UI::UIMessage::kSendWorldAction, &packet);
         }
+
 
         wchar_t* GetPlayerNameByLoginNumber(uint32_t login_number) {
             return PlayerMgr::GetPlayerName(login_number);

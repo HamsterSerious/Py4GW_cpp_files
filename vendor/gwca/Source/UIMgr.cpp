@@ -1596,6 +1596,14 @@ namespace GW {
             
             return true;
         }
+        void EnqueueDelayed(std::function<void()> f, int delay_ms) {
+            std::thread([f, delay_ms]() {
+                Sleep(delay_ms);
+                GW::GameThread::Enqueue(f);
+                }).detach();
+        }
+
+
         bool SetPreference(NumberPreference pref, uint32_t value)
         {
             if (!PrefsInitialised())

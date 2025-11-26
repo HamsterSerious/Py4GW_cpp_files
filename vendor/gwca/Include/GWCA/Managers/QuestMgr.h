@@ -40,5 +40,17 @@ namespace GW {
         
         GWCA_API bool RequestQuestInfoId(Constants::QuestID quest_id, bool update_markers=false);
 
+		GWCA_API void AsyncGetQuestName(const Quest* quest, std::wstring& res);
+
+		GWCA_API void AsyncGetQuestDescription(const Quest* quest, std::wstring& res);
+
+		GWCA_API void AsyncGetQuestObjectives(const Quest* quest, std::wstring& res);
+
+		GWCA_API void AsyncGetQuestLocation(const Quest* quest, std::wstring& res);
+
+		GWCA_API void AsyncGetQuestNPC(const Quest* quest, std::wstring& res);
+
+		GWCA_API void AsyncDecodeAnyEncStr(const wchar_t* str, std::wstring& res);
+
     };
 }

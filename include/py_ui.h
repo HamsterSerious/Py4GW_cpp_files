@@ -301,6 +301,41 @@ public:
 
 	}
 
+	static std::vector<uint32_t> GetKeyMappings() {
+        // NB: This address is fond twice, we only care about the first.
+        uint32_t* key_mappings_array = nullptr;
+        uint32_t key_mappings_array_length = 0x75;
+        uintptr_t address = GW::Scanner::FindAssertion("FrKey.cpp", "count == arrsize(s_remapTable)", 0, 0x13);
+        Logger::AssertAddress("key_mappings", address);
+        if (address && GW::Scanner::IsValidPtr(*(uintptr_t*)address)) {
+            key_mappings_array = *(uint32_t**)address;
+        }
+		std::vector<uint32_t> result;
+		if (key_mappings_array) {
+			result.assign(key_mappings_array, key_mappings_array + key_mappings_array_length);
+		}
+		return result;
+	}
+
+	static void SetKeyMappings(const std::vector<uint32_t>& mappings) {
+		GW::GameThread::Enqueue([mappings]() {
+			// NB: This address is fond twice, we only care about the first.
+			uint32_t* key_mappings_array = nullptr;
+			uint32_t key_mappings_array_length = 0x75;
+			uintptr_t address = GW::Scanner::FindAssertion("FrKey.cpp", "count == arrsize(s_remapTable)", 0, 0x13);
+			Logger::AssertAddress("key_mappings", address);
+			if (address && GW::Scanner::IsValidPtr(*(uintptr_t*)address)) {
+				key_mappings_array = *(uint32_t**)address;
+			}
+			if (key_mappings_array) {
+				size_t count = std::min(static_cast<size_t>(key_mappings_array_length), mappings.size());
+				std::copy(mappings.begin(), mappings.begin() + count, key_mappings_array);
+			}
+			});
+	}
+
+
+
 	static std::vector <uint32_t> GetFrameArray() {
 		return GW::UI::GetFrameArray();
 	}
@@ -350,16 +385,16 @@ public:
     }
 
     static std::vector<uintptr_t> GetWindowPosition(uint32_t window_id) {
-	    std::vector<uintptr_t> result;
-	    GW::UI::WindowPosition* position = GW::UI::GetWindowPosition(static_cast<GW::UI::WindowID>(window_id));
-	    if (position) {
-			result.push_back(position->p1.x);
-			result.push_back(position->p1.y);
-			result.push_back(position->p2.x);
-			result.push_back(position->p2.y);
-
-	    }
-	    return result;
+        std::vector<uintptr_t> result;
+        GW::UI::WindowPosition* position =
+            GW::UI::GetWindowPosition(static_cast<GW::UI::WindowID>(window_id));
+        if (position) {
+            result.push_back(static_cast<uintptr_t>(position->left()));
+            result.push_back(static_cast<uintptr_t>(position->top()));
+            result.push_back(static_cast<uintptr_t>(position->right()));
+            result.push_back(static_cast<uintptr_t>(position->bottom()));
+        }
+        return result;
     }
 
 	static bool IsWindowVisible(uint32_t window_id) {
@@ -376,18 +411,22 @@ public:
 			});
 	}
 
-	static void SetWindowPosition(uint32_t window_id, const std::vector<uintptr_t>& position) {
-		GW::GameThread::Enqueue([window_id, position]() {
-			if (position.size() < 4) return; // Ensure we have enough data
-			GW::UI::WindowPosition* win_pos = GW::UI::GetWindowPosition(static_cast<GW::UI::WindowID>(window_id));
-			if (!win_pos) return;
-			win_pos->p1.x = static_cast<float>(position[0]);
-			win_pos->p1.y = static_cast<float>(position[1]);
-			win_pos->p2.x = static_cast<float>(position[2]);
-			win_pos->p2.y = static_cast<float>(position[3]);
-			GW::UI::SetWindowPosition(static_cast<GW::UI::WindowID>(window_id), win_pos);
-			});
-	}
+    static void SetWindowPosition(uint32_t window_id, const std::vector<uintptr_t>& position) {
+        GW::GameThread::Enqueue([window_id, position]() {
+            if (position.size() < 4) return; // Ensure we have enough data
+            GW::UI::WindowPosition* win_pos =
+                GW::UI::GetWindowPosition(static_cast<GW::UI::WindowID>(window_id));
+            if (!win_pos) return;
+
+            // write back into p1/p2 from the values we accepted (left, top, right, bottom)
+            win_pos->p1.x = static_cast<float>(position[0]);
+            win_pos->p1.y = static_cast<float>(position[1]);
+            win_pos->p2.x = static_cast<float>(position[2]);
+            win_pos->p2.y = static_cast<float>(position[3]);
+
+            GW::UI::SetWindowPosition(static_cast<GW::UI::WindowID>(window_id), win_pos);
+            });
+    }
 
 	static bool IsShiftScreenShot() {
 		return GW::UI::GetIsShiftScreenShot();
