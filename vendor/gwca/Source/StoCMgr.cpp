@@ -16,7 +16,7 @@
 #include <GWCA/Logger/Logger.h>
 
 namespace {
-    constexpr uint32_t STOC_HEADER_COUNT = 0x1e5;
+    constexpr uint32_t STOC_HEADER_COUNT = 0x1e7;
 
     using namespace GW;
     CRITICAL_SECTION mutex = { 0 };
@@ -151,6 +151,9 @@ namespace {
 
         stoc_handler_count = game_server_handlers->size();
         // Because GW registers new handlers module by module, we may have caught it too soon; sanity check to make sure the header count is over 300
+        std::string msg = "STOC_HEADER_COUNT [" + std::to_string(stoc_handler_count) + "]";
+        Logger::Instance().LogInfo(msg);
+
         GWCA_ASSERT(stoc_handler_count == STOC_HEADER_COUNT);
         if(!original_functions)
             original_functions = new StoCHandler[stoc_handler_count];

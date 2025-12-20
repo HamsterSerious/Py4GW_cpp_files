@@ -193,6 +193,56 @@ public:
 		return GW::UI::GetChildFrameID(parent_hash, child_offsets);
 	}
 
+    // pybind11 signature: SendUIMessagePacked(msgid, layout, values, skip_hooks=false)
+    static bool SendUIMessage(
+        uint32_t msgid,
+        std::vector<uint32_t> values,
+        bool skip_hooks = false
+    ) {
+            struct UIPayload_POD {
+                uint32_t words[16]; // 64 bytes max
+            };
+
+            UIPayload_POD payload{};
+            // Zero-initialized -> important
+
+			auto size = values.size();
+			for (size_t i = 0; i < size; i++) {
+				if (i < 16) {
+					payload.words[i] = static_cast<uint32_t>(values[i]);
+				}
+			}
+
+        // Call GW
+			bool result = GW::UI::SendUIMessage(static_cast<GW::UI::UIMessage> (msgid),
+				&payload,
+				nullptr,
+				skip_hooks
+			);
+		return result;
+
+    }
+
+    static bool SendUIMessageRaw(
+        uint32_t msgid,
+        uintptr_t wparam,
+        uintptr_t lparam = 0,
+        bool skip_hooks = false
+    ) {
+        return GW::UI::SendUIMessage(
+            static_cast<GW::UI::UIMessage> (msgid),
+            reinterpret_cast<void*>(wparam),
+            reinterpret_cast<void*>(lparam),
+            skip_hooks
+        );
+    }
+
+
+
+
+
+
+
 	static void ButtonClick(uint32_t frame_id) {
         GW::GameThread::Enqueue([frame_id]() {
             GW::UI::Frame* frame = GW::UI::GetFrameById(frame_id);

@@ -1325,7 +1325,85 @@ public:
     }
 };
 
+using FrameCallbackId = uint64_t;
 
+struct FrameCallback {
+    FrameCallbackId id;
+    std::string name;
+    py::object fn;
+};
+
+static std::vector<FrameCallback> g_frame_callbacks;
+static std::mutex g_frame_callbacks_mutex;
+static FrameCallbackId g_next_callback_id = 1;
+
+FrameCallbackId RegisterFrameCallback(const std::string& name, py::function fn)
+{
+    std::lock_guard<std::mutex> lock(g_frame_callbacks_mutex);
+
+    // If callback with same name exists, replace function, keep id
+    for (auto& cb : g_frame_callbacks) {
+        if (cb.name == name) {
+            cb.fn = std::move(fn);
+            return cb.id;
+        }
+    }
+
+    // Otherwise, register new callback
+    FrameCallbackId id = g_next_callback_id++;
+    g_frame_callbacks.push_back({
+        id,
+        name,
+        std::move(fn)
+        });
+
+    return id;
+}
+
+
+bool RemoveFrameCallbackById(FrameCallbackId id)
+{
+    std::lock_guard<std::mutex> lock(g_frame_callbacks_mutex);
+
+    auto it = std::remove_if(
+        g_frame_callbacks.begin(),
+        g_frame_callbacks.end(),
+        [&](const FrameCallback& cb) {
+            return cb.id == id;
+        }
+    );
+
+    if (it == g_frame_callbacks.end())
+        return false;
+
+    g_frame_callbacks.erase(it, g_frame_callbacks.end());
+    return true;
+}
+
+bool RemoveFrameCallbackByName(const std::string& name)
+{
+    std::lock_guard<std::mutex> lock(g_frame_callbacks_mutex);
+
+    auto it = std::remove_if(
+        g_frame_callbacks.begin(),
+        g_frame_callbacks.end(),
+        [&](const FrameCallback& cb) {
+            return cb.name == name;
+        }
+    );
+
+    if (it == g_frame_callbacks.end())
+        return false;
+
+    g_frame_callbacks.erase(it, g_frame_callbacks.end());
+    return true;
+}
+
+void RemoveAllFrameCallbacks()
+{
+    std::lock_guard<std::mutex> lock(g_frame_callbacks_mutex);
+    g_frame_callbacks.clear();
+}
 
 
 
@@ -1379,12 +1457,12 @@ void Py4GW::Draw(IDirect3DDevice9* device) {
     
 	bool is_map_loading = GW::Map::GetInstanceType() == GW::Constants::InstanceType::Loading;
 
-	if (show_console || is_map_loading) {
+	//if (show_console || is_map_loading) {
 		DrawConsole("Py4GW Console", &console_open);
-	}
-	else {
-		DrawCompactConsole(&console_open);
-	}
+	//}
+	//else {
+	//	DrawCompactConsole(&console_open);
+	//}
 
     if (first_run) {
         first_run = false;
@@ -1484,6 +1562,21 @@ void Py4GW::Draw(IDirect3DDevice9* device) {
         dll_shutdown = true;
         modal_result_ok = false; // Reset modal result state
     }
+
+    py::gil_scoped_acquire gil;
+
+    std::lock_guard<std::mutex> lock(g_frame_callbacks_mutex);
+
+    for (auto& cb : g_frame_callbacks) {
+        try {
+            cb.fn();
+        }
+        catch (const py::error_already_set& e) {
+			continue; // Skip errors in frame callbacks
+        }
+    }
+
+
 
     // Check if the script is in the running state and the script content is loaded
     if (script_state == ScriptState::Running && !script_content.empty()) {
@@ -2174,6 +2267,31 @@ PYBIND11_EMBEDDED_MODULE(Py4GW, m)
 		&Get_Tick_Count64,
 		"Get the current tick count as a 64-bit integer"
 	);
+
+    game.def(
+        "register_callback",
+        &RegisterFrameCallback,
+        "Register a named per-frame callback (idempotent by name)"
+    );
+
+    game.def(
+        "remove_callback_by_id",
+        &RemoveFrameCallbackById,
+        "Remove a per-frame callback by id"
+    );
+
+    game.def(
+        "remove_callback",
+        &RemoveFrameCallbackByName,
+        "Remove a per-frame callback by name"
+    );
+
+    game.def(
+        "clear_callbacks",
+        &RemoveAllFrameCallbacks,
+        "Remove all registered per-frame callbacks"
+    );
+
 
     // Bind the MessageType enum inside the 'Console' submodule
     py::enum_<MessageType>(console, "MessageType")

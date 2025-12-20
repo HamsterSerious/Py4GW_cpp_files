@@ -365,6 +365,23 @@ PYBIND11_EMBEDDED_MODULE(PyUIManager, m) {
 		.def_static("set_key_mappings", &UIManager::SetKeyMappings, py::arg("mappings"), "Sets new key mappings.")
 
 
+		.def_static(
+			"SendUIMessage",
+			&UIManager::SendUIMessage,
+			py::arg("msgid"),
+			py::arg("values"),
+			py::arg("skip_hooks") = false
+		)
+
+		.def_static(
+			"SendUIMessageRaw",
+			&UIManager::SendUIMessageRaw,
+			py::arg("msgid"),
+			py::arg("wparam"),
+			py::arg("lparam") = 0,
+			py::arg("skip_hooks") = false
+		)
+
 		.def_static("button_click", &UIManager::ButtonClick, py::arg("frame_id"), "Simulates a button click on a frame.")
 		.def_static("test_mouse_action", &UIManager::TestMouseAction, py::arg("frame_id"), py::arg("current_state"), py::arg("wparam_value") = 0, py::arg("lparam") = 0, "Simulates a mouse action on a frame.")
 		.def_static("test_mouse_click_action", &UIManager::TestMouseClickAction, py::arg("frame_id"), py::arg("current_state"), py::arg("wparam_value") = 0, py::arg("lparam") = 0, "Simulates a mouse action on a frame.")

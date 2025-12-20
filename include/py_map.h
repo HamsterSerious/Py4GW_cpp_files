@@ -316,7 +316,10 @@ public:
     bool EnterChallenge();
     bool CancelEnterChallenge();
 	uint32_t GetMapID();
-    
+	uintptr_t GetMissionMapContextPtr();
+    uintptr_t GetWorldMapContextPtr();
+    uintptr_t GetGameplayContextPtr();
+	uintptr_t GetAreaInfoPtr();
 };
 
 

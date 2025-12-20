@@ -1023,6 +1023,25 @@ bool PyMap::CancelEnterChallenge() {
     return GW::Map::CancelEnterChallenge();
 }
 
+uintptr_t  PyMap::GetWorldMapContextPtr()
+{
+    return reinterpret_cast<uintptr_t>(GW::Map::GetWorldMapContext());
+}
+
+uintptr_t  PyMap::GetMissionMapContextPtr()
+{
+	return reinterpret_cast<uintptr_t>(GW::Map::GetMissionMapContext());
+}
+
+uintptr_t PyMap::GetGameplayContextPtr()
+{
+	return reinterpret_cast<uintptr_t>(GW::GetGameplayContext());
+}
+
+uintptr_t PyMap::GetAreaInfoPtr()
+{
+	return reinterpret_cast<uintptr_t>(GW::Map::GetMapInfo(map_id.Get()));
+}
 
 
 void bind_InstanceType(py::module_& m) {
@@ -1284,7 +1303,10 @@ PYBIND11_EMBEDDED_MODULE(PyMap, m) {
         .def("SkipCinematic", &PyMap::SkipCinematic)
         .def("EnterChallenge", &PyMap::EnterChallenge)
         .def("CancelEnterChallenge", &PyMap::CancelEnterChallenge)
-		.def("GetMapID", &PyMap::GetMapID);
+		.def("GetMapID", &PyMap::GetMapID)
+		.def("GetMissionMapContextPtr", &PyMap::GetMissionMapContextPtr)
+		.def("GetWorldMapContextPtr", &PyMap::GetWorldMapContextPtr)
+		.def("GetGameplayContextPtr", &PyMap::GetGameplayContextPtr);
 
 }
 
