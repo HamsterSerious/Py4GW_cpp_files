@@ -457,14 +457,17 @@ namespace GW {
             kObjectiveAdd = 0x1000015A,                  // 0x1000015A, wparam = UIPacket::kObjectiveAdd*
             kObjectiveComplete = 0x1000015B,             // 0x1000015B, wparam = UIPacket::kObjectiveComplete*
             kObjectiveUpdated = 0x1000015C,              // 0x1000015C, wparam = UIPacket::kObjectiveUpdated*
-            kTradeSessionStart = 0x10000162,             // 0x10000162, wparam = { trade_state, player_number }
-            kTradeSessionUpdated = 0x10000168,           // 0x10000168, no args
+            kTradeSessionStart = 0x10000165,             // 0x10000165, wparam = { trade_state, player_number }
+            kTradeSessionUpdated = 0x1000016b,           // 0x1000016b, no args
+
             kTriggerLogoutPrompt = 0x1000016E,           // 0x1000016E, no args
             kToggleOptionsWindow = 0x1000016F,           // 0x1000016F, no args
-            kCheckUIState = 0x10000172,                  // 0x10000172
             kRedrawItem = 0x10000174,                    // 0x10000174, wparam = uint32_t item_id
+            kCheckUIState = 0x10000175,                  // 0x10000175
             kCloseSettings = 0x10000176,                 // 0x10000176
             kChangeSettingsTab = 0x10000177,             // 0x10000177, wparam = uint32_t is_interface_tab
+            kDestroyUIPositionOverlay = 0x10000179,                 // 0x10000179
+            kEnableUIPositionOverlay = 0x1000017a,             // 0x1000017a, wparam = uint32_t enable
 
             kGuildHall = 0x1000017C,                     // 0x1000017C, wparam = gh key (uint32_t[4])
             kLeaveGuildHall = 0x1000017E,                // 0x1000017E

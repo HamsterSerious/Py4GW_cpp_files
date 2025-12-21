@@ -9,6 +9,7 @@
 #include <mutex>
 #include <GWCA/Logger/Logger.h>
 
+#pragma optimize("", off)
 
 namespace {
     using namespace GW;
@@ -21,7 +22,7 @@ namespace {
 
     bool initialised = false;
 
-    bool in_gamethread = false;
+    std::atomic<bool> in_gamethread = false;
 
     std::vector<std::function<void()>> singleshot_callbacks;
 

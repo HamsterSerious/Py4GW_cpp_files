@@ -85,6 +85,8 @@ public:
     uint32_t GetActiveTitleId();
 	std::vector<int> GetTitleArray();
 	bool IsAgentIDValid(int agent_id);
+	uintptr_t GetGameContextPtr();
+	uintptr_t GetPreGameContextPtr();
 
     
 };

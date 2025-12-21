@@ -12,6 +12,7 @@
 #include <GWCA/Managers/CameraMgr.h>
 #include <GWCA/Logger/Logger.h>
 
+#pragma optimize("", off)
 
 namespace {
     using namespace GW;
@@ -58,7 +59,7 @@ namespace {
     GwEndScene_pt RetScreenCapture = 0, ScreenCapture_Func = 0;
 
     CRITICAL_SECTION mutex;
-    bool in_render_loop = false;
+    std::atomic<bool> in_render_loop = false;
 
     typedef bool (__cdecl *GwReset_pt)(gwdx* ctx);
     GwReset_pt RetGwReset = 0, GwReset_Func = 0;

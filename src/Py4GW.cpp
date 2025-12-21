@@ -1457,12 +1457,12 @@ void Py4GW::Draw(IDirect3DDevice9* device) {
     
 	bool is_map_loading = GW::Map::GetInstanceType() == GW::Constants::InstanceType::Loading;
 
-	//if (show_console || is_map_loading) {
+	if (show_console || is_map_loading) {
 		DrawConsole("Py4GW Console", &console_open);
-	//}
-	//else {
-	//	DrawCompactConsole(&console_open);
-	//}
+	}
+	else {
+		DrawCompactConsole(&console_open);
+	}
 
     if (first_run) {
         first_run = false;

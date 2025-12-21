@@ -536,6 +536,13 @@ std::vector<int> PyPlayer::GetTitleArray() {
 	return GW::PlayerMgr::GetTitleIDs();   
 }
 
+uintptr_t PyPlayer::GetGameContextPtr() {
+	return reinterpret_cast<uintptr_t>(GW::GetGameContext());
+}
+
+uintptr_t PyPlayer::GetPreGameContextPtr() {
+	return reinterpret_cast<uintptr_t>(GW::GetPreGameContext());
+}
 
 namespace GW {
     struct AvailableCharacterInfo {
@@ -637,10 +644,10 @@ PyPreGameContext GetPreGameContext() {
 	if (!pregame) return pgc;
 	pgc.frame_id = pregame->frame_id;
 	pgc.chosen_character_index = pregame->chosen_character_index;
-	pgc.index_1 = pregame->index_1;
-	pgc.index_2 = pregame->index_2;
+    pgc.index_1 = 0; // pregame->index_1;
+    pgc.index_2 = 0; // pregame->index_2;
 	for (int i = 0; i < 72; ++i) {pgc.h0004.push_back(pregame->h0004[i]);}
-	for (int i = 0; i < 6; ++i) { pgc.h0128.push_back(pregame->h0128[i]); }
+	//for (int i = 0; i < 6; ++i) { pgc.h0128.push_back(pregame->h0128[i]); }
 	
     for (size_t i = 0; i < pregame->chars.size(); ++i) {
         const auto& login_char = pregame->chars[i];
@@ -836,7 +843,11 @@ void BindPyPlayer(py::module_& m) {
         .def_static("LogouttoCharacterSelect", &LogouttoCharacterSelect) // Bind the LogouttoCharacterSelect method
         .def_static("GetIsCharacterSelectReady", &GetIsCharacterSelectReady) // Bind the GetIsCharacterSelectReady method
         .def_static("GetAvailableCharacters", &GetAvailableCharacters) // Bind the GetAvailableCharacters method
-        .def_static("GetPreGameContext", &GetPreGameContext); // Bind the GetPreGameContext method
+        .def_static("GetPreGameContext", &GetPreGameContext) // Bind the GetPreGameContext method
+		.def("GetGameContextPtr", &PyPlayer::GetGameContextPtr) // Bind the GetGameContextPtr method
+		.def("GetPreGameContextPtr", &PyPlayer::GetPreGameContextPtr) // Bind the GetPreGameContextPtr method
+		;
+        
 }
 
 PYBIND11_EMBEDDED_MODULE(PyPlayer, m) {
