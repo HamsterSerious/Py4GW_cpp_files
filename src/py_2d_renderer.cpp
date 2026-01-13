@@ -438,7 +438,6 @@ void Py2DRenderer::DrawPolyFilled(Point2D center, float radius, D3DCOLOR color, 
     g_d3d_device->DrawPrimitiveUP(D3DPT_TRIANGLEFAN, segments, verts.data(), sizeof(D3DVertex));
 }
 
-
 void Py2DRenderer::Setup3DView() {
     if (!g_d3d_device) return;
 
@@ -451,6 +450,8 @@ void Py2DRenderer::Setup3DView() {
     g_d3d_device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
     g_d3d_device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
     g_d3d_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+
+
 
     auto* cam = GW::CameraMgr::GetCamera();
     if (!cam) return;
@@ -479,6 +480,9 @@ void Py2DRenderer::Setup3DView() {
     g_d3d_device->SetTransform(D3DTS_WORLD, &identity);
 
 }
+
+
+
 
 
 void Py2DRenderer::DrawLine3D(Point3D from, Point3D to, D3DCOLOR color, bool use_occlusion, int segments, float floor_offset)

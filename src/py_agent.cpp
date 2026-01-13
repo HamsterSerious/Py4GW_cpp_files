@@ -350,6 +350,23 @@ std::string local_WStringToString(const std::wstring& s)
     return out;
 }
 
+static bool IsValidUTF8(const std::string& s) {
+    int need = 0;
+    for (unsigned char c : s) {
+        if (need == 0) {
+            if ((c & 0x80) == 0x00) continue;
+            if ((c & 0xE0) == 0xC0) need = 1;
+            else if ((c & 0xF0) == 0xE0) need = 2;
+            else if ((c & 0xF8) == 0xF0) need = 3;
+            else return false;
+        }
+        else {
+            if ((c & 0xC0) != 0x80) return false;
+            --need;
+        }
+    }
+    return need == 0;
+}
 
 
 
@@ -441,10 +458,18 @@ std::string _GetNameByID(uint32_t agent_id)
             }
         }
 
-        GW::GameThread::Enqueue([key, name_str = local_WStringToString(temp_name)]() {
-            agent_name_map[key].agent_name = name_str;
+        std::string decoded = local_WStringToString(temp_name);
+
+        if (!IsValidUTF8(decoded)) {
+            agent_name_pending.erase(key); // allow retry
+            return;
+        }
+
+        GW::GameThread::Enqueue([key, decoded]() {
+            agent_name_map[key].agent_name = decoded;
             agent_name_map[key].name_ready = true;
             });
+
 
         agent_name_pending.erase(key);
         }).detach();

@@ -66,7 +66,7 @@ namespace {
 
     /* FRame Logging*/
     GWCA_API std::vector<std::tuple<uint64_t, uint32_t, std::string>> frame_logs;
-    static const size_t MAX_LOGS = 500;
+    static const size_t MAX_LOGS = 5000;
 
     void LogFrameLabel(uint32_t frame_id, const wchar_t* label_w)
     {
