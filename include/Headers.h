@@ -276,7 +276,7 @@ extern Timer salvage_timer;
 #include "py_agent.h"
 #include "py_items.h"
 #include "py_inventory.h"
-#include "py_missionmap.h"
+
 #include "py_skills.h"
 #include "py_skillbar.h"
 #include "py_merchant.h"
