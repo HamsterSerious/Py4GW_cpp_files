@@ -255,13 +255,30 @@ ZResult FindZ(float x, float y) {
 float Overlay::findZ(float x, float y, uint32_t zplane_hint) {
     // If you pass 0 => no hint; if you pass player->plane => stable
     //return FindZ(x, y).z;
+    auto instance_type = GW::Map::GetInstanceType();
+    bool is_map_ready = (GW::Map::GetIsMapLoaded()) && (!GW::Map::GetIsObserving()) && (instance_type != GW::Constants::InstanceType::Loading);
+
+    if (!is_map_ready) {
+        return 0.0f;
+    } 
+
     auto* player = GW::Agents::GetControlledCharacter();
     if (!player)
         return 0.0f;
 
-    return player->z;
+	auto z = QueryZ(x, y, static_cast<uint32_t>(player->plane));
+
+    return z;
 }
 uint32_t Overlay::FindZPlane(float x, float y, uint32_t zplane_hint) {
+    auto instance_type = GW::Map::GetInstanceType();
+    bool is_map_ready = (GW::Map::GetIsMapLoaded()) && (!GW::Map::GetIsObserving()) && (instance_type != GW::Constants::InstanceType::Loading);
+
+    if (!is_map_ready) {
+        return 0;
+    }
+
+
     return FindZ(x, y).plane;
     auto* player = GW::Agents::GetControlledCharacter();
     if (!player)

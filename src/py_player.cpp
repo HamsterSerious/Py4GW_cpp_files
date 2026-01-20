@@ -387,6 +387,30 @@ bool PyPlayer::IsAgentIDValid(int agent_id) {
 	return true;
 }
 
+bool PyPlayer::InteractAgent(int agent_id, bool call_target) {
+    if (agent_id == 0) return false;
+
+    GW::GameThread::Enqueue([agent_id, call_target] {
+        if (GW::Agent* a = GW::Agents::GetAgentByID(agent_id)) {
+            GW::Agents::InteractAgent(a, call_target);
+        }
+        });
+    return true;
+}
+
+bool PyPlayer::ChangeTarget(uint32_t new_target_id) {
+    if (new_target_id == 0) return false;
+
+    auto agent = GW::Agents::GetAgentByID(new_target_id);
+    if (!agent) return false;
+
+    GW::GameThread::Enqueue([agent, new_target_id] {
+        if (GW::Agent* a = GW::Agents::GetAgentByID(new_target_id)) {
+            GW::Agents::ChangeTarget(agent);
+        }
+        });
+    return true;
+}
 
 
 
@@ -437,10 +461,10 @@ void BindPyPlayer(py::module_& m) {
         .def_readonly("learnable_character_skills", &PyPlayer::learnable_character_skills)  // Bind the learnable_character_skills attribute
         .def_readonly("unlocked_character_skills", &PyPlayer::unlocked_character_skills)  // Bind the unlocked_character_skills attribute
 
-
-
         .def("SendDialog", &PyPlayer::SendDialog, py::arg("dialog_id"))  // Bind the SendDialog method
-        
+        .def("ChangeTarget", &PyPlayer::ChangeTarget, py::arg("target_id"))  // Bind the ChangeTarget method
+        .def("InteractAgent", &PyPlayer::InteractAgent, py::arg("agent_id"), py::arg("call_target"))  // Bind the InteractAgent method
+
         .def("IsAgentIDValid", &PyPlayer::IsAgentIDValid, py::arg("agent_id"))  // Bind the IsAgentIDValid method
         .def("GetChatHistory", &PyPlayer::GetChatHistory)  // Bind the GetChatHistory method
         .def("RequestChatHistory", &PyPlayer::RequestChatHistory)  // Bind the RequestChatHistory method
