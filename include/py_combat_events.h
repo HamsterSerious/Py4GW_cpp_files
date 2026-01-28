@@ -43,6 +43,8 @@
 
 #include <GWCA/Packets/StoC.h>
 #include <GWCA/Managers/StoCMgr.h>
+#include <GWCA/Managers/MapMgr.h>
+#include <GWCA/Constants/Constants.h>
 #include <GWCA/Utilities/Hook.h>
 
 #include <pybind11/pybind11.h>
@@ -317,6 +319,15 @@ private:
      * If queue exceeds max_events, oldest events are dropped.
      */
     void PushEvent(const RawCombatEvent& event);
+
+    /**
+     * @brief Check if the map is ready for packet processing.
+     * @return true if map is loaded and not in loading state.
+     *
+     * Prevents crashes during map transitions by skipping packet processing
+     * when game memory may be invalid.
+     */
+    bool IsMapReady() const;
 };
 
 // ============================================================================
