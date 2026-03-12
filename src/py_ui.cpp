@@ -1,6 +1,10 @@
 #pragma once
 #include "py_ui.h"
 
+// py_ui.cpp is intentionally thin: py_ui.h owns almost all of the native
+// behavior, while this file focuses on translating those helpers into the
+// embedded Python module surface.
+// Copies raw interaction callbacks into a wrapper that is safe to expose to Python.
 std::vector<UIInteractionCallbackWrapper> ConvertUIInteractionCallbacks(const GW::Array<GW::UI::UIInteractionCallback>& arr) {
 	std::vector<UIInteractionCallbackWrapper> result;
 	result.reserve(arr.size());
@@ -12,6 +16,7 @@ std::vector<UIInteractionCallbackWrapper> ConvertUIInteractionCallbacks(const GW
 	return result;
 }
 
+// Reinterprets the callback array as frame callbacks so Python can inspect the extra metadata.
 std::vector<UIInteractionCallbackWrapper> ConvertFrameInteractionCallbacks(const GW::Array<GW::UI::UIInteractionCallback>& arr) {
     std::vector<UIInteractionCallbackWrapper> result;
     auto* callbacks = reinterpret_cast<const GW::Array<GW::UI::FrameInteractionCallback>*>(&arr);
@@ -24,6 +29,7 @@ std::vector<UIInteractionCallbackWrapper> ConvertFrameInteractionCallbacks(const
     return result;
 }
 
+// Converts an opaque pointer array into integer addresses for Python-side inspection.
 std::vector<uintptr_t> FillVectorFromPointerArray(const GW::Array<void*>& arr) {
 	std::vector<uintptr_t> vec;
 	vec.reserve(arr.size());  // Optimize memory allocation
@@ -36,6 +42,7 @@ std::vector<uintptr_t> FillVectorFromPointerArray(const GW::Array<void*>& arr) {
 }
 
 
+// Collects sibling frame ids from the relation list attached to a frame.
 std::vector<uint32_t> GetSiblingFrameIDs(uint32_t frame_id) {
 	std::vector<uint32_t> sibling_ids;
 
@@ -62,9 +69,7 @@ std::vector<uint32_t> GetSiblingFrameIDs(uint32_t frame_id) {
 
 	return sibling_ids;
 }
-
-
-
+// Populates the UIFrame snapshot object from the live native frame.
 void UIFrame::GetContext() {
 
 	GW::UI::Frame* frame = GW::UI::GetFrameById(frame_id);
@@ -218,6 +223,9 @@ void UIFrame::GetContext() {
 
 
 PYBIND11_EMBEDDED_MODULE(PyUIManager, m) {
+	// Low-level wrappers mirror native structs closely so Python-side
+	// investigation can inspect reconstructed frame state without additional
+	// marshaling layers.
 	py::class_<UIInteractionCallbackWrapper>(m, "UIInteractionCallback")
 		.def(py::init<GW::UI::UIInteractionCallback>())
 		.def_readwrite("callback_address", &UIInteractionCallbackWrapper::callback_address)
@@ -360,6 +368,8 @@ PYBIND11_EMBEDDED_MODULE(PyUIManager, m) {
 		.def("get_context", &UIFrame::GetContext);
 
 
+	// UIManager binds the reverse-engineered UI surface. The Python GWUI facade
+	// is the ergonomic layer; this module stays close to the native primitives.
 	py::class_<UIManager>(m, "UIManager")
 		.def_static("get_text_language", &UIManager::GetTextLanguage, "Gets the current text language.")
 		.def_static("get_frame_logs", &UIManager::GetFrameLogs, "Retrieves the logs related to UI frames.")
@@ -537,6 +547,14 @@ PYBIND11_EMBEDDED_MODULE(PyUIManager, m) {
 			py::arg("height"),
 			py::arg("flags") = 0x6
 		)
+		.def_static("queue_frame_controller_update_by_frame_id",
+			&UIManager::QueueFrameControllerUpdateByFrameId,
+			py::arg("frame_id")
+		)
+		.def_static("process_frame_controller_update_by_frame_id",
+			&UIManager::ProcessFrameControllerUpdateByFrameId,
+			py::arg("frame_id")
+		)
 		.def_static("choose_anchor_flags_for_desired_rect",
 			&UIManager::ChooseAnchorFlagsForDesiredRect,
 			py::arg("x"),
@@ -711,6 +729,223 @@ PYBIND11_EMBEDDED_MODULE(PyUIManager, m) {
 			py::arg("name_enc") = std::wstring(),
 			py::arg("component_label") = std::wstring()
 		)
+		.def_static("get_button_label_by_frame_id",
+			&UIManager::GetButtonLabelByFrameId,
+			py::arg("frame_id"))
+		.def_static("set_button_label_by_frame_id",
+			&UIManager::SetButtonLabelByFrameId,
+			py::arg("frame_id"),
+			py::arg("enc_label"))
+		.def_static("button_mouse_action_by_frame_id",
+			&UIManager::ButtonMouseActionByFrameId,
+			py::arg("frame_id"),
+			py::arg("action"))
+		.def_static("add_tab_by_frame_id",
+			&UIManager::AddTabByFrameId,
+			py::arg("tabs_frame_id"),
+			py::arg("tab_name_enc"),
+			py::arg("flags"),
+			py::arg("child_index"),
+			py::arg("callback") = 0,
+			py::arg("wparam") = 0)
+		.def_static("disable_tab_by_frame_id",
+			&UIManager::DisableTabByFrameId,
+			py::arg("tabs_frame_id"),
+			py::arg("tab_id"))
+		.def_static("enable_tab_by_frame_id",
+			&UIManager::EnableTabByFrameId,
+			py::arg("tabs_frame_id"),
+			py::arg("tab_id"))
+		.def_static("remove_tab_by_frame_id",
+			&UIManager::RemoveTabByFrameId,
+			py::arg("tabs_frame_id"),
+			py::arg("tab_id"))
+		.def_static("get_current_tab_index_by_frame_id",
+			&UIManager::GetCurrentTabIndexByFrameId,
+			py::arg("tabs_frame_id"))
+		.def_static("get_tab_frame_id_by_frame_id",
+			&UIManager::GetTabFrameIdByFrameId,
+			py::arg("tabs_frame_id"),
+			py::arg("tab_id"))
+		.def_static("get_is_tab_enabled_by_frame_id",
+			&UIManager::GetIsTabEnabledByFrameId,
+			py::arg("tabs_frame_id"),
+			py::arg("tab_id"))
+		.def_static("get_tab_by_label_by_frame_id",
+			&UIManager::GetTabByLabelByFrameId,
+			py::arg("tabs_frame_id"),
+			py::arg("label"))
+		.def_static("get_current_tab_by_frame_id",
+			&UIManager::GetCurrentTabByFrameId,
+			py::arg("tabs_frame_id"))
+		.def_static("choose_tab_by_tab_frame_id",
+			&UIManager::ChooseTabByTabFrameId,
+			py::arg("tabs_frame_id"),
+			py::arg("tab_frame_id"))
+		.def_static("choose_tab_by_index_by_frame_id",
+			&UIManager::ChooseTabByIndexByFrameId,
+			py::arg("tabs_frame_id"),
+			py::arg("tab_index"))
+		.def_static("get_tab_button_by_frame_id",
+			&UIManager::GetTabButtonByFrameId,
+			py::arg("tabs_frame_id"),
+			py::arg("tab_frame_id"))
+		.def_static("set_scrollable_sort_handler_by_frame_id",
+			&UIManager::SetScrollableSortHandlerByFrameId,
+			py::arg("frame_id"),
+			py::arg("handler"))
+		.def_static("get_scrollable_sort_handler_by_frame_id",
+			&UIManager::GetScrollableSortHandlerByFrameId,
+			py::arg("frame_id"))
+		.def_static("clear_scrollable_items_by_frame_id",
+			&UIManager::ClearScrollableItemsByFrameId,
+			py::arg("frame_id"))
+		.def_static("remove_scrollable_item_by_frame_id",
+			&UIManager::RemoveScrollableItemByFrameId,
+			py::arg("frame_id"),
+			py::arg("child_index"))
+		.def_static("add_scrollable_item_by_frame_id",
+			&UIManager::AddScrollableItemByFrameId,
+			py::arg("frame_id"),
+			py::arg("flags"),
+			py::arg("child_index"),
+			py::arg("callback") = 0)
+		.def_static("get_scrollable_item_frame_id_by_frame_id",
+			&UIManager::GetScrollableItemFrameIdByFrameId,
+			py::arg("frame_id"),
+			py::arg("child_index"))
+		.def_static("get_scrollable_selected_value_by_frame_id",
+			&UIManager::GetScrollableSelectedValueByFrameId,
+			py::arg("frame_id"))
+		.def_static("get_scrollable_first_child_frame_id_by_frame_id",
+			&UIManager::GetScrollableFirstChildFrameIdByFrameId,
+			py::arg("frame_id"))
+		.def_static("get_scrollable_next_child_frame_id_by_frame_id",
+			&UIManager::GetScrollableNextChildFrameIdByFrameId,
+			py::arg("frame_id"),
+			py::arg("current_child_frame_id"))
+		.def_static("get_scrollable_last_child_frame_id_by_frame_id",
+			&UIManager::GetScrollableLastChildFrameIdByFrameId,
+			py::arg("frame_id"))
+		.def_static("get_scrollable_prev_child_frame_id_by_frame_id",
+			&UIManager::GetScrollablePrevChildFrameIdByFrameId,
+			py::arg("frame_id"),
+			py::arg("current_child_frame_id"))
+		.def_static("get_scrollable_item_rect_by_frame_id",
+			&UIManager::GetScrollableItemRectByFrameId,
+			py::arg("frame_id"),
+			py::arg("child_index"))
+		.def_static("get_scrollable_count_by_frame_id",
+			&UIManager::GetScrollableCountByFrameId,
+			py::arg("frame_id"))
+		.def_static("get_scrollable_items_by_frame_id",
+			&UIManager::GetScrollableItemsByFrameId,
+			py::arg("frame_id"))
+		.def_static("get_scrollable_page_by_frame_id",
+			&UIManager::GetScrollablePageByFrameId,
+			py::arg("frame_id"))
+		.def_static("set_scrollable_page_by_frame_id",
+			&UIManager::SetScrollablePageByFrameId,
+			py::arg("frame_id"),
+			py::arg("page_context"))
+		.def_static("get_editable_text_value_by_frame_id",
+			&UIManager::GetEditableTextValueByFrameId,
+			py::arg("frame_id"))
+		.def_static("set_editable_text_value_by_frame_id",
+			&UIManager::SetEditableTextValueByFrameId,
+			py::arg("frame_id"),
+			py::arg("value"))
+		.def_static("set_editable_text_max_length_by_frame_id",
+			&UIManager::SetEditableTextMaxLengthByFrameId,
+			py::arg("frame_id"),
+			py::arg("max_length"))
+		.def_static("is_editable_text_read_only_by_frame_id",
+			&UIManager::IsEditableTextReadOnlyByFrameId,
+			py::arg("frame_id"))
+		.def_static("set_editable_text_read_only_by_frame_id",
+			&UIManager::SetEditableTextReadOnlyByFrameId,
+			py::arg("frame_id"),
+			py::arg("read_only"))
+		.def_static("get_progress_bar_value_by_frame_id",
+			&UIManager::GetProgressBarValueByFrameId,
+			py::arg("frame_id"))
+		.def_static("set_progress_bar_value_by_frame_id",
+			&UIManager::SetProgressBarValueByFrameId,
+			py::arg("frame_id"),
+			py::arg("value"))
+		.def_static("set_progress_bar_max_by_frame_id",
+			&UIManager::SetProgressBarMaxByFrameId,
+			py::arg("frame_id"),
+			py::arg("value"))
+		.def_static("set_progress_bar_color_id_by_frame_id",
+			&UIManager::SetProgressBarColorIdByFrameId,
+			py::arg("frame_id"),
+			py::arg("color_id"))
+		.def_static("set_progress_bar_style_by_frame_id",
+			&UIManager::SetProgressBarStyleByFrameId,
+			py::arg("frame_id"),
+			py::arg("style"))
+		.def_static("is_checkbox_checked_by_frame_id",
+			&UIManager::IsCheckboxCheckedByFrameId,
+			py::arg("frame_id"))
+		.def_static("set_checkbox_checked_by_frame_id",
+			&UIManager::SetCheckboxCheckedByFrameId,
+			py::arg("frame_id"),
+			py::arg("checked"))
+		.def_static("get_checkbox_value_by_frame_id",
+			&UIManager::GetCheckboxValueByFrameId,
+			py::arg("frame_id"))
+		.def_static("set_checkbox_value_by_frame_id",
+			&UIManager::SetCheckboxValueByFrameId,
+			py::arg("frame_id"),
+			py::arg("value"))
+		.def_static("get_dropdown_options_by_frame_id",
+			&UIManager::GetDropdownOptionsByFrameId,
+			py::arg("frame_id"))
+		.def_static("select_dropdown_option_by_frame_id",
+			&UIManager::SelectDropdownOptionByFrameId,
+			py::arg("frame_id"),
+			py::arg("value"))
+		.def_static("select_dropdown_index_by_frame_id",
+			&UIManager::SelectDropdownIndexByFrameId,
+			py::arg("frame_id"),
+			py::arg("index"))
+		.def_static("add_dropdown_option_by_frame_id",
+			&UIManager::AddDropdownOptionByFrameId,
+			py::arg("frame_id"),
+			py::arg("label_enc"),
+			py::arg("value"))
+		.def_static("get_dropdown_count_by_frame_id",
+			&UIManager::GetDropdownCountByFrameId,
+			py::arg("frame_id"))
+		.def_static("get_dropdown_option_value_by_frame_id",
+			&UIManager::GetDropdownOptionValueByFrameId,
+			py::arg("frame_id"),
+			py::arg("index"))
+		.def_static("get_dropdown_option_index_by_frame_id",
+			&UIManager::GetDropdownOptionIndexByFrameId,
+			py::arg("frame_id"),
+			py::arg("value"))
+		.def_static("get_dropdown_selected_index_by_frame_id",
+			&UIManager::GetDropdownSelectedIndexByFrameId,
+			py::arg("frame_id"))
+		.def_static("dropdown_has_value_mapping_by_frame_id",
+			&UIManager::DropdownHasValueMappingByFrameId,
+			py::arg("frame_id"))
+		.def_static("get_dropdown_value_by_frame_id",
+			&UIManager::GetDropdownValueByFrameId,
+			py::arg("frame_id"))
+		.def_static("set_dropdown_value_by_frame_id",
+			&UIManager::SetDropdownValueByFrameId,
+			py::arg("frame_id"),
+			py::arg("value"))
+		.def_static("get_slider_value_by_frame_id",
+			&UIManager::GetSliderValueByFrameId,
+			py::arg("frame_id"))
+		.def_static("set_slider_value_by_frame_id",
+			&UIManager::SetSliderValueByFrameId,
+			py::arg("frame_id"),
+			py::arg("value"))
 		.def_static("create_text_label_frame_with_plain_text_by_frame_id",
 			&UIManager::CreateTextLabelFrameWithPlainTextByFrameId,
 			py::arg("parent_frame_id"),
