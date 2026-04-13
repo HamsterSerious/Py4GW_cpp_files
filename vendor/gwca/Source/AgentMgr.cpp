@@ -185,6 +185,9 @@ namespace {
         int success = HookBase::CreateHook((void**)&DoWorldActon_Func, OnDoWorldActon_Func, (void**)&DoWorldActon_Ret);
         Logger::AssertHook("DoWorldActon_Func", success);
 
+        //success = HookBase::CreateHook((void**)&CallTarget_Func, OnCallTarget_Func, (void**)&CallTarget_Ret);
+		//Logger::AssertHook("CallTarget_Func", success);
+        // 
         // NOTE: CallTarget_Func initialization is currently missing - hook is disabled
         // The CallTarget functionality still works through UI messages (kSendCallTarget)
         // TODO: Add Scanner::Find for CallTarget_Func if direct hooking is needed

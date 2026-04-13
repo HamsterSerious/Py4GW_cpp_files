@@ -118,6 +118,7 @@
 #include <pybind11/stl.h>
 
 #include "Ini_handler.h"
+#include "SharedMemory.h"
 #include "Timer.h"
 
 #include <commdlg.h>
@@ -308,6 +309,7 @@ extern Timer salvage_timer;
 #include "WindowCfg.h"
 #include "PyScanner.h"
 #include "PyPointers.h"
+#include "Py4GW_UI.h"
 
 
 #endif // PCH_H

@@ -344,6 +344,14 @@ std::array<float, 4> ImGui_ColorEdit4(const std::string& label, const std::array
     return color; // Return the original color if not changed
 }
 
+std::array<float, 4> ImGui_ColorEdit4(const std::string& label, const std::array<float, 4>& color, ImGuiColorEditFlags flags) {
+    std::array<float, 4> temp = color;
+	if (ImGui::ColorEdit4(label.c_str(), temp.data(), flags)) {
+        return temp; // Return the updated color
+    }
+    return color; // Return the original color if not changed
+}
+
 //push_style_color
 void ImGui_PushStyleColor(ImGuiCol idx, const std::array<float, 4>& col) {
     ImGui::PushStyleColor(idx, ImVec4(col[0], col[1], col[2], col[3]));
@@ -749,6 +757,10 @@ int ImGui_TableGetRowIndex() {
 // Tabs
 bool ImGui_BeginTabBar(const std::string& str_id) {
     return ImGui::BeginTabBar(str_id.c_str());
+}
+
+bool ImGui_BeginTabBarWithFlags(const std::string& str_id, ImGuiTabBarFlags flags) {
+    return ImGui::BeginTabBar(str_id.c_str(), flags);
 }
 
 void ImGui_EndTabBar() {
@@ -1465,6 +1477,27 @@ void Dummy(const int width, const int height) {
 	ImGui::Dummy(ImVec2(width, height));
 }
 
+// Path API Wrappers
+void ImGui_PathClear() {
+    ImGui::GetWindowDrawList()->PathClear();
+}
+
+void ImGui_PathLineTo(float x, float y) {
+    ImGui::GetWindowDrawList()->PathLineTo(ImVec2(x, y));
+}
+
+void ImGui_PathArcTo(float x, float y, float radius, float a_min, float a_max, int num_segments = 0) {
+    ImGui::GetWindowDrawList()->PathArcTo(ImVec2(x, y), radius, a_min, a_max, num_segments);
+}
+
+void ImGui_PathFillConvex(ImU32 col) {
+    ImGui::GetWindowDrawList()->PathFillConvex(col);
+}
+
+void ImGui_PathStroke(ImU32 col, bool closed = false, float thickness = 1.0f) {
+    ImGui::GetWindowDrawList()->PathStroke(col, closed, thickness);
+}
+
 
 struct SafeImGuiIO {
 	float display_size_x = 0.0f;
@@ -1574,7 +1607,7 @@ PYBIND11_EMBEDDED_MODULE(PyImGui, m) {
         .value("NoBringToFrontOnFocus", ImGuiWindowFlags_NoBringToFrontOnFocus)
         .value("AlwaysVerticalScrollbar", ImGuiWindowFlags_AlwaysVerticalScrollbar)
         .value("AlwaysHorizontalScrollbar", ImGuiWindowFlags_AlwaysHorizontalScrollbar)
-        //.value("AlwaysUseWindowPadding", ImGuiWindowFlags_AlwaysUseWindowPadding)
+        .value("NoInputs", ImGuiWindowFlags_NoInputs)
         .value("NoNavInputs", ImGuiWindowFlags_NoNavInputs)
         .value("NoNavFocus", ImGuiWindowFlags_NoNavFocus)
         .value("UnsavedDocument", ImGuiWindowFlags_UnsavedDocument)
@@ -1645,6 +1678,40 @@ PYBIND11_EMBEDDED_MODULE(PyImGui, m) {
         .export_values()
         .def("__or__", [](ImGuiSelectableFlags_ a, ImGuiSelectableFlags_ b) {
         return static_cast<ImGuiSelectableFlags_>(static_cast<int>(a) | static_cast<int>(b));
+            });
+
+    // Tab Bar Flags
+    py::enum_<ImGuiTabBarFlags_>(m, "TabBarFlags")
+        .value("NoFlag", ImGuiTabBarFlags_None)
+        .value("Reorderable", ImGuiTabBarFlags_Reorderable)
+        .value("AutoSelectNewTabs", ImGuiTabBarFlags_AutoSelectNewTabs)
+        .value("TabListPopupButton", ImGuiTabBarFlags_TabListPopupButton)
+        .value("NoCloseWithMiddleMouseButton", ImGuiTabBarFlags_NoCloseWithMiddleMouseButton)
+        .value("NoTabListScrollingButtons", ImGuiTabBarFlags_NoTabListScrollingButtons)
+        .value("NoTooltip", ImGuiTabBarFlags_NoTooltip)
+        .value("FittingPolicyResizeDown", ImGuiTabBarFlags_FittingPolicyResizeDown)
+        .value("FittingPolicyScroll", ImGuiTabBarFlags_FittingPolicyScroll)
+        .value("FittingPolicyMask_", ImGuiTabBarFlags_FittingPolicyMask_)
+        .value("FittingPolicyDefault_", ImGuiTabBarFlags_FittingPolicyDefault_)
+        .export_values()
+        .def("__or__", [](ImGuiTabBarFlags_ a, ImGuiTabBarFlags_ b) {
+        return static_cast<ImGuiTabBarFlags_>(static_cast<int>(a) | static_cast<int>(b));
+            });
+
+    // Tab Item Flags
+    py::enum_<ImGuiTabItemFlags_>(m, "TabItemFlags")
+        .value("NoFlag", ImGuiTabItemFlags_None)
+        .value("UnsavedDocument", ImGuiTabItemFlags_UnsavedDocument)
+        .value("SetSelected", ImGuiTabItemFlags_SetSelected)
+        .value("NoCloseWithMiddleMouseButton", ImGuiTabItemFlags_NoCloseWithMiddleMouseButton)
+        .value("NoPushId", ImGuiTabItemFlags_NoPushId)
+        .value("NoTooltip", ImGuiTabItemFlags_NoTooltip)
+        .value("NoReorder", ImGuiTabItemFlags_NoReorder)
+        .value("Leading", ImGuiTabItemFlags_Leading)
+        .value("Trailing", ImGuiTabItemFlags_Trailing)
+        .export_values()
+        .def("__or__", [](ImGuiTabItemFlags_ a, ImGuiTabItemFlags_ b) {
+        return static_cast<ImGuiTabItemFlags_>(static_cast<int>(a) | static_cast<int>(b));
             });
 
     // Table Flags
@@ -1898,6 +1965,37 @@ PYBIND11_EMBEDDED_MODULE(PyImGui, m) {
 		return static_cast<ImGuiComboFlags_>(static_cast<int>(a) | static_cast<int>(b));
 			});
 
+	py::enum_<ImGuiColorEditFlags_>(m, "ColorEditFlags")
+		.value("NoFlag", ImGuiColorEditFlags_None)
+		.value("NoAlpha", ImGuiColorEditFlags_NoAlpha)
+		.value("NoPicker", ImGuiColorEditFlags_NoPicker)
+		.value("NoOptions", ImGuiColorEditFlags_NoOptions)
+		.value("NoSmallPreview", ImGuiColorEditFlags_NoSmallPreview)
+		.value("NoInputs", ImGuiColorEditFlags_NoInputs)
+		.value("NoTooltip", ImGuiColorEditFlags_NoTooltip)
+		.value("NoLabel", ImGuiColorEditFlags_NoLabel)
+		.value("NoSidePreview", ImGuiColorEditFlags_NoSidePreview)
+		.value("NoDragDrop", ImGuiColorEditFlags_NoDragDrop)
+		.value("NoBorder", ImGuiColorEditFlags_NoBorder)
+        .value("AlphaBar", ImGuiColorEditFlags_AlphaBar)
+        .value("AlphaPreview", ImGuiColorEditFlags_AlphaPreview)
+        .value("AlphaPreviewHalf", ImGuiColorEditFlags_AlphaPreviewHalf)
+        .value("HDR", ImGuiColorEditFlags_HDR)
+		.value("DisplayRGB", ImGuiColorEditFlags_DisplayRGB)
+		.value("DisplayHSV", ImGuiColorEditFlags_DisplayHSV)
+		.value("DisplayHex", ImGuiColorEditFlags_DisplayHex)
+		.value("Uint8", ImGuiColorEditFlags_Uint8)
+		.value("Float", ImGuiColorEditFlags_Float)
+		.value("PickerHueBar", ImGuiColorEditFlags_PickerHueBar)
+		.value("PickerHueWheel", ImGuiColorEditFlags_PickerHueWheel)
+		.value("InputRGB", ImGuiColorEditFlags_InputRGB)
+		.value("InputHSV", ImGuiColorEditFlags_InputHSV)
+
+		.export_values()
+		.def("__or__", [](ImGuiColorEditFlags_ a, ImGuiColorEditFlags_ b) {
+		return static_cast<ImGuiColorEditFlags_>(static_cast<int>(a) | static_cast<int>(b));
+			});
+
     // Basic Widgets
 	m.def("new_line", &ImGui_NewLine, "Inserts a new line in ImGui");
     m.def("text", &ImGui_Text, "Displays a text in ImGui");
@@ -1952,7 +2050,26 @@ PYBIND11_EMBEDDED_MODULE(PyImGui, m) {
 	m.def("end_combo", &ImGui_EndCombo, "Ends a combo box in ImGui");
 	m.def("selectable", &ImGui_Selectable, "Creates a selectable item in ImGui");
     m.def("color_edit3", &ImGui_ColorEdit3, "A function to create a color editor (RGB)");
-    m.def("color_edit4", &ImGui_ColorEdit4, "Creates an RGBA color editor in ImGui");
+
+
+    m.def(
+        "color_edit4",
+        py::overload_cast<
+        const std::string&,
+        const std::array<float, 4>&
+        >(&ImGui_ColorEdit4),
+        "A function to create a color editor (RGBA) without flags"
+    );
+
+    m.def(
+        "color_edit4",
+        py::overload_cast<
+        const std::string&,
+        const std::array<float, 4>&,
+        ImGuiColorEditFlags
+        >(&ImGui_ColorEdit4),
+        "A function to create a color editor (RGBA) with flags"
+    );
 
     m.def("get_scroll_max_x", &ImGui_GetScrollMaxX, "Returns the maximum scroll value in the x-direction");
     m.def("get_scroll_max_y", &ImGui_GetScrollMaxY, "Returns the maximum scroll value in the y-direction");
@@ -2204,6 +2321,7 @@ PYBIND11_EMBEDDED_MODULE(PyImGui, m) {
 
     // Tabs
     m.def("begin_tab_bar", &ImGui_BeginTabBar, "Begins a tab bar in ImGui");
+    m.def("begin_tab_bar", &ImGui_BeginTabBarWithFlags, py::arg("str_id"), py::arg("flags"), "Begins a tab bar in ImGui with flags");
     m.def("end_tab_bar", &ImGui_EndTabBar, "Ends the tab bar in ImGui");
     // Overload bindings
     m.def("begin_tab_item",
@@ -2304,7 +2422,16 @@ PYBIND11_EMBEDDED_MODULE(PyImGui, m) {
     m.def("collapsing_header", py::overload_cast<const std::string&, ImGuiTreeNodeFlags>(&ImGui_CollapsingHeader));
 
     //Dummy
-	m.def("dummy", &Dummy, "Creates a dummy in ImGui");
+    m.def("dummy", &Dummy, "Creates a dummy in ImGui");
+
+    m.def("path_clear", &ImGui_PathClear, "Clear current path");
+    m.def("path_line_to", &ImGui_PathLineTo, py::arg("x"), py::arg("y"), "Add a line to the path");
+    m.def("path_arc_to", &ImGui_PathArcTo,
+        py::arg("x"), py::arg("y"), py::arg("radius"),
+        py::arg("a_min"), py::arg("a_max"), py::arg("num_segments") = 0,
+        "Add an arc to the path (angles in radians)");
+    m.def("path_fill_convex", &ImGui_PathFillConvex, py::arg("col"), "Fill the path with a convex shape");
+    m.def("path_stroke", &ImGui_PathStroke, py::arg("col"), py::arg("closed") = false, py::arg("thickness") = 1.0f, "Draw the path outline");
 
 
     // Safer ctor: ensure context exists before constructing (prevents crash)

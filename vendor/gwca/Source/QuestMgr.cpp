@@ -59,6 +59,7 @@ namespace {
     void Init() {
         //Logger::Instance().LogInfo("############ QuestMgr initialization started ############");
         DWORD address = 0;
+        DWORD request_quest_info_address = 0;
 
         //address = Scanner::Find("\x74\x14\x68\x33\x01\x00\x00", "xxxxxx", 0x19);
         //address = Scanner::Find("\xC7\x45\xF8\x02\x00\x00\x00\x50\xC7", "xxxxxxxxx", -0x45);

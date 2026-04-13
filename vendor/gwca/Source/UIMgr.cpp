@@ -43,6 +43,10 @@ namespace {
     typedef uint32_t(__cdecl* GetChildFrameId_pt)(uint32_t, uint32_t);
     GetChildFrameId_pt GetChildFrameId_Func = 0;
 
+    typedef void(__cdecl* TypedComponentPassthroughHook_pt)(void*, void*, void*, void*, void*);
+    TypedComponentPassthroughHook_pt TypedComponentPassthroughHook_Func = 0;
+    TypedComponentPassthroughHook_pt TypedComponentPassthroughHook_Ret = 0;
+
     // Create a uint hash from a wide char array; used for hashing frame ids
     uint32_t __cdecl OnCreateHashFromWchar(wchar_t* wcs, int seed) {
         GW::Hook::EnterHook();
@@ -51,11 +55,19 @@ namespace {
         return out;
     }
 
+    void __cdecl OnTypedComponentPassthroughHook(void* param_1, void* param_2, void* param_3, void* param_4, void* param_5) {
+        GW::Hook::EnterHook();
+        TypedComponentPassthroughHook_Ret(param_1, param_2, param_3, param_4, param_5);
+        GW::Hook::LeaveHook();
+    }
+
     uintptr_t* UiFrames_Addr = nullptr;
 
     typedef uint32_t(__cdecl* CreateUIComponent_pt)(uint32_t frame_id, uint32_t component_flags, uint32_t tab_index, void* event_callback, wchar_t* name_enc, wchar_t* component_label);
     CreateUIComponent_pt CreateUIComponent_Func = 0;
     CreateUIComponent_pt CreateUIComponent_Ret = 0;
+    typedef bool(__cdecl* DestroyUIComponent_pt)(uint32_t frame_id);
+    DestroyUIComponent_pt DestroyUIComponent_Func = 0;
 
     struct CreateUIComponentCallbackEntry {
         int altitude;
@@ -90,7 +102,14 @@ namespace {
 
     uint32_t __cdecl OnCreateUIComponent(uint32_t frame_id, uint32_t component_flags, uint32_t tab_index, void* event_callback, wchar_t* name_enc, wchar_t* component_label) {
         GW::Hook::EnterHook();
-        UI::CreateUIComponentPacket packet = {frame_id,component_flags, tab_index, event_callback, name_enc, component_label};
+        UI::CreateUIComponentPacket packet = {
+            frame_id,
+            component_flags,
+            tab_index,
+            reinterpret_cast<UI::UIInteractionCallback>(event_callback),
+            name_enc,
+            component_label
+        };
         
         HookStatus status;
         size_t i = 0;
@@ -459,6 +478,7 @@ namespace {
 
 
         // @TODO: Grab the seeding context from memory, write this ourselves!
+        //CreateHashFromWchar: volatile jz offset (was 0x0d, 0x10).
         //address = Scanner::Find("\x85\xc0\x74\x0d\x6a\xff\x50", "xxxxxxx", 0x7);
         address = Scanner::Find("\x85\xc0\x74\x10\x6a\xff\x50", "xxxxxxx", 0x7);
         CreateHashFromWchar_Func = (CreateHashFromWchar_pt)GW::Scanner::FunctionFromNearCall(address);
@@ -579,8 +599,11 @@ namespace {
 
 
         // NB: 0x66 is the size of the window info array
+		// /commented address on exe 28-nov-2025
         //SetWindowVisible_Func = (SetWindowVisible_pt)Scanner::ToFunctionStart(Scanner::Find("\x8B\x75\x08\x83\xFE\x66\x7C\x19\x68", "xxxxxxxxx"));
-        SetWindowVisible_Func = (SetWindowVisible_pt)Scanner::ToFunctionStart(Scanner::Find("\x8B\x75\x08\x83\xFE\x69\x7C\x19\x68", "xxxxxxxxx"));
+        //SetWindowVisible: volatile array size byte (was 0x66, 0x69, 0x6A). Wildcard it.
+        //SetWindowVisible_Func = (SetWindowVisible_pt)Scanner::ToFunctionStart(Scanner::Find("\x8B\x75\x08\x83\xFE\x6A\x7C\x19\x68", "xxxxxxxxx"));
+        SetWindowVisible_Func = (SetWindowVisible_pt)Scanner::ToFunctionStart(Scanner::Find("\x8B\x75\x08\x83\xFE\x00\x7C\x19\x68", "xxxxx?xxx"));
         if (SetWindowVisible_Func) {
             SetWindowPosition_Func = reinterpret_cast<SetWindowPosition_pt>((uintptr_t)SetWindowVisible_Func - 0xE0);
             address = (uintptr_t)SetWindowVisible_Func + 0x49;
@@ -603,6 +626,8 @@ namespace {
 
         //CreateUIComponent_Func = (CreateUIComponent_pt)Scanner::ToFunctionStart(GW::Scanner::Find("\x33\xd2\x89\x45\x08\xb9\xac\x01\x00\x00", "xxxxxxxxxx"));
         CreateUIComponent_Func = (CreateUIComponent_pt)Scanner::ToFunctionStart(GW::Scanner::Find("\x33\xd2\x89\x45\x08\xb9\xc8\x01\x00\x00", "xxxxxxxxxx"));
+        DestroyUIComponent_Func = (DestroyUIComponent_pt)Scanner::ToFunctionStart(
+            Scanner::FindAssertion("\\Code\\Gw\\Ui\\Frame\\FrApi.cpp", "frame->state.Test(FRAME_STATE_CREATED)", 0, 0));
 
 
         // Graphics renderer related
@@ -1000,7 +1025,7 @@ namespace GW {
             }
 
             GW::UI::UIPacket::kMouseAction action{};
-            
+
             action.child_offset_id = action.frame_id = btn_frame->child_offset_id;
             struct button_param {
                 uint32_t unk;
@@ -1217,6 +1242,84 @@ namespace GW {
 
 		}
 
+        namespace {
+            UIInteractionCallback ButtonFrame_Callback = nullptr;
+            UIInteractionCallback ScrollableFrame_Callback = nullptr;
+            UIInteractionCallback TextLabelFrame_Callback = nullptr;
+            UIInteractionCallback FrameList_Callback = nullptr;
+            bool TypedComponentCallbacks_Initialized = false;
+
+            struct TypedScrollablePageContext {
+                void* field_0;
+                void* field_4;
+                uint32_t field_8;
+            };
+
+            void InitializeTypedComponentCallbacks() {
+                if (TypedComponentCallbacks_Initialized)
+                    return;
+                TypedComponentCallbacks_Initialized = true;
+
+                uintptr_t addr = 0;
+                uintptr_t* ptr = nullptr;
+
+                addr = Scanner::FindAssertion(
+                    "UiCtlBtn.cpp",
+                    "!s_btnCheckImageList",
+                    0, 0);
+                if (addr)
+                    ButtonFrame_Callback = reinterpret_cast<UIInteractionCallback>(Scanner::ToFunctionStart(addr, 0xFF));
+
+                addr = Scanner::FindAssertion(
+                    "CtlText.cpp",
+                    "FrameTestStyles(hdr.frameId, CTLTEXT_STYLE_MODEL)",
+                    0, 0);
+                if (addr)
+                    TextLabelFrame_Callback = reinterpret_cast<UIInteractionCallback>(Scanner::ToFunctionStart(addr, 0xFFF));
+
+                addr = Scanner::Find("\x81\xE1\x00\x00\xF8\xFF", "xxxxxx", -4, static_cast<ScannerSection>(0));
+                if (addr) {
+                    ptr = reinterpret_cast<uintptr_t*>(addr);
+                    ScrollableFrame_Callback = reinterpret_cast<UIInteractionCallback>(*ptr);
+                }
+
+                addr = Scanner::FindAssertion(
+                    "CtlFrameList.cpp",
+                    "No valid case for switch variable 'msg.relation'",
+                    0, 0);
+                if (addr)
+                    FrameList_Callback = reinterpret_cast<UIInteractionCallback>(Scanner::ToFunctionStart(addr, 0xFFF));
+
+                addr = Scanner::FindAssertion(
+                    "FrApi.cpp",
+                    "params->inputMask < FrameMarginsParams::INPUT_ILLEGAL_BIT_FIRST",
+                    0, 0);
+                if (addr) {
+                    TypedComponentPassthroughHook_Func = reinterpret_cast<TypedComponentPassthroughHook_pt>(
+                        Scanner::ToFunctionStart(addr, 0xFFF));
+                    if (TypedComponentPassthroughHook_Func) {
+                        HookBase::CreateHook(
+                            reinterpret_cast<void**>(&TypedComponentPassthroughHook_Func),
+                            reinterpret_cast<void*>(OnTypedComponentPassthroughHook),
+                            reinterpret_cast<void**>(&TypedComponentPassthroughHook_Ret));
+                        HookBase::EnableHooks(reinterpret_cast<void*>(TypedComponentPassthroughHook_Func));
+                    }
+                }
+            }
+
+            uint32_t FindAvailableChildIndex(Frame* parent, uint32_t child_index) {
+                if (!parent)
+                    return 0;
+                uint32_t resolved_index = child_index;
+                while (GetChildFrame(parent, resolved_index)) {
+                    resolved_index += 1;
+                    if (!resolved_index)
+                        return 0;
+                }
+                return resolved_index;
+            }
+        }
+
         Frame* GetParentFrame(Frame* frame) {
             return frame ? frame->relation.GetParent() : nullptr;
         }
@@ -1226,6 +1329,125 @@ namespace GW {
                 return nullptr;
             auto frame = (*s_FrameArray)[frame_id];
             return IsFrameValid(frame) ? frame : nullptr;
+        }
+        uint32_t CreateUIComponent(uint32_t frame_id, uint32_t component_flags, uint32_t tab_index, UIInteractionCallback event_callback, wchar_t* name_enc, wchar_t* component_label) {
+            if (!CreateUIComponent_Func)
+                return 0;
+            return CreateUIComponent_Func(frame_id, component_flags, tab_index, reinterpret_cast<void*>(event_callback), name_enc, component_label);
+        }
+        bool DestroyUIComponent(Frame* frame) {
+            if (!(frame && frame->IsCreated() && DestroyUIComponent_Func))
+                return false;
+            return DestroyUIComponent_Func(frame->frame_id);
+        }
+        bool AddFrameUIInteractionCallback(Frame* frame, UIInteractionCallback callback, void* wparam) {
+            if (!(frame && frame->IsCreated() && callback))
+                return false;
+            auto* callbacks = reinterpret_cast<Array<FrameInteractionCallback>*>(&frame->frame_callbacks);
+            if (!(callbacks->valid() && callbacks->size() < callbacks->capacity()))
+                return false;
+            auto& entry = callbacks->m_buffer[callbacks->m_size++];
+            entry.callback = callback;
+            entry.uictl_context = wparam;
+            entry.h0008 = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(wparam));
+            return true;
+        }
+        bool TriggerFrameRedraw(Frame* frame) {
+            if (!(frame && frame->IsCreated()))
+                return false;
+            return SendFrameUIMessage(frame, UIMessage::kRefreshContent, nullptr, nullptr);
+        }
+        Frame* CreateButtonFrame(uint32_t parent_frame_id, uint32_t component_flags, uint32_t child_index, wchar_t* name_enc, wchar_t* component_label) {
+            InitializeTypedComponentCallbacks();
+            if (!ButtonFrame_Callback)
+                return nullptr;
+            auto* parent = GetFrameById(parent_frame_id);
+            if (!parent)
+                return nullptr;
+            auto existing = GetChildFrame(parent, child_index);
+            while (existing) {
+                child_index += 1;
+                existing = GetChildFrame(parent, child_index);
+            }
+            const auto frame_id = CreateUIComponent(parent_frame_id, component_flags, child_index, ButtonFrame_Callback, name_enc, component_label);
+            return frame_id ? GetFrameById(frame_id) : nullptr;
+        }
+        Frame* CreateButtonFrame(Frame* parent, uint32_t component_flags, uint32_t child_index, wchar_t* name_enc, wchar_t* component_label) {
+            return parent ? CreateButtonFrame(parent->frame_id, component_flags, child_index, name_enc, component_label) : nullptr;
+        }
+        Frame* CreateCheckboxFrame(uint32_t parent_frame_id, uint32_t component_flags, uint32_t child_index, wchar_t* name_enc, wchar_t* component_label) {
+            auto* button = CreateButtonFrame(parent_frame_id, component_flags | 0x8000, child_index, name_enc, component_label);
+            return button ? reinterpret_cast<Frame*>(reinterpret_cast<uintptr_t>(button) - 4) : nullptr;
+        }
+        Frame* CreateCheckboxFrame(Frame* parent, uint32_t component_flags, uint32_t child_index, wchar_t* name_enc, wchar_t* component_label) {
+            return parent ? CreateCheckboxFrame(parent->frame_id, component_flags, child_index, name_enc, component_label) : nullptr;
+        }
+        Frame* CreateScrollableFrame(uint32_t parent_frame_id, uint32_t component_flags, uint32_t child_index, void* page_context, wchar_t* component_label) {
+            TypedScrollablePageContext default_page_context = {};
+            InitializeTypedComponentCallbacks();
+            if (!ScrollableFrame_Callback)
+                return nullptr;
+            default_page_context.field_4 = reinterpret_cast<void*>(FrameList_Callback);
+            auto* resolved_page_context = page_context ? reinterpret_cast<TypedScrollablePageContext*>(page_context) : &default_page_context;
+            if (!resolved_page_context->field_4)
+                return nullptr;
+            auto* parent = GetFrameById(parent_frame_id);
+            if (!parent)
+                return nullptr;
+            auto existing = GetChildFrame(parent, child_index);
+            while (existing) {
+                child_index += 1;
+                existing = GetChildFrame(parent, child_index);
+            }
+            const auto frame_id = CreateUIComponent(
+                parent_frame_id,
+                component_flags | 0x20000,
+                child_index,
+                ScrollableFrame_Callback,
+                reinterpret_cast<wchar_t*>(resolved_page_context),
+                component_label);
+            return frame_id ? GetFrameById(frame_id) : nullptr;
+        }
+        Frame* CreateScrollableFrame(Frame* parent, uint32_t component_flags, uint32_t child_index, void* page_context, wchar_t* component_label) {
+            return parent ? CreateScrollableFrame(parent->frame_id, component_flags, child_index, page_context, component_label) : nullptr;
+        }
+        Frame* CreateTextLabelFrame(uint32_t parent_frame_id, uint32_t component_flags, uint32_t child_index, wchar_t* name_enc, wchar_t* component_label) {
+            InitializeTypedComponentCallbacks();
+            if (!TextLabelFrame_Callback)
+                return nullptr;
+            auto* parent = GetFrameById(parent_frame_id);
+            if (!parent)
+                return nullptr;
+            auto existing = GetChildFrame(parent, child_index);
+            while (existing) {
+                child_index += 1;
+                existing = GetChildFrame(parent, child_index);
+            }
+            const auto frame_id = CreateUIComponent(parent_frame_id, component_flags, child_index, TextLabelFrame_Callback, name_enc, component_label);
+            return frame_id ? GetFrameById(frame_id) : nullptr;
+        }
+        Frame* CreateTextLabelFrame(Frame* parent, uint32_t component_flags, uint32_t child_index, wchar_t* name_enc, wchar_t* component_label) {
+            return parent ? CreateTextLabelFrame(parent->frame_id, component_flags, child_index, name_enc, component_label) : nullptr;
+        }
+        void* GetFrameContext(Frame* frame) {
+            auto* callbacks = reinterpret_cast<Array<FrameInteractionCallback>*>(&frame->frame_callbacks);
+            if (!(frame && callbacks->size())) {
+                return nullptr;
+            }
+            for (size_t i = callbacks->size(); i > 0; --i) {
+                auto& callback = callbacks->at(i - 1);
+                if (callback.uictl_context) {
+                    return callback.uictl_context;
+                }
+            }
+            return nullptr;
+        }
+        bool SetFrameMargins(Frame* frame, uint32_t flags, float size[4], float input_mask[4], uint32_t type) {
+            if (!(frame && TypedComponentPassthroughHook_Func)) {
+                return false;
+            }
+            TypedComponentPassthroughHook_Func(reinterpret_cast<void*>(frame->frame_id), reinterpret_cast<void*>(flags), size, input_mask, reinterpret_cast<void*>(type));
+            return true;
         }
         Frame* GetFrameByLabel(const wchar_t* frame_label) {
             if (!(CreateHashFromWchar_Func && s_FrameArray))
@@ -2061,6 +2283,730 @@ namespace GW {
                 }  
             }
         }
+    }
+
+    namespace {
+        template <typename T>
+        inline UI::Frame* ValueFrame(T* this_ptr) {
+            return reinterpret_cast<UI::Frame*>(reinterpret_cast<uintptr_t>(this_ptr) + sizeof(void*));
+        }
+
+        inline uint32_t FrameField(const UI::Frame* frame, uintptr_t offset) {
+            return *reinterpret_cast<const uint32_t*>(reinterpret_cast<uintptr_t>(frame) + offset);
+        }
+
+        template <typename TValue>
+        inline bool SendValueChangedMessage(UI::Frame* frame, const TValue& value) {
+            if (!frame) {
+                return false;
+            }
+            struct ValueChangedPacket {
+                uint32_t child_offset_id;
+                uint32_t frame_id;
+                uint32_t field_8;
+                TValue value;
+                uint32_t field_10;
+            } packet = {};
+            packet.child_offset_id = FrameField(frame, 0xbc);
+            packet.frame_id = FrameField(frame, 0xb8);
+            packet.field_8 = 7;
+            packet.value = value;
+            packet.field_10 = 0;
+            return UI::SendFrameUIMessage(UI::GetParentFrame(frame), UI::UIMessage(static_cast<uint32_t>(0x31)), &packet, nullptr);
+        }
+    }
+
+    ButtonFrame* ButtonFrame::Create(uint32_t parent_frame_id, uint32_t flags, uint32_t child_offset_id, const wchar_t* button_label, const wchar_t* frame_label) {
+        return reinterpret_cast<ButtonFrame*>(UI::CreateButtonFrame(parent_frame_id, flags, child_offset_id, const_cast<wchar_t*>(button_label), const_cast<wchar_t*>(frame_label)));
+    }
+
+    bool ButtonFrame::GetLabel(const wchar_t** enc_string) {
+        auto* context = UI::GetFrameContext(this);
+        if (context && *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(context) + 0xc)) {
+            *enc_string = *reinterpret_cast<const wchar_t**>(reinterpret_cast<uintptr_t>(context) + 4);
+            return true;
+        }
+        return false;
+    }
+
+    bool ButtonFrame::SetLabel(const wchar_t* enc_string) {
+        if (enc_string != nullptr) {
+            const auto ok = UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x5c)), const_cast<wchar_t*>(enc_string), nullptr);
+            if (ok) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool ButtonFrame::Click() {
+        if (MouseAction(UI::UIPacket::ActionState::MouseDown)) {
+            if (MouseAction(UI::UIPacket::ActionState::MouseUp)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool ButtonFrame::MouseAction(UI::UIPacket::ActionState action) {
+        if ((frame_state & 0x214) == 4) {
+            auto* parent = UI::GetParentFrame(this);
+            if (parent && ((parent->frame_state >> 2) & 1) != 0) {
+                struct MouseActionPacket {
+                    uint32_t frame_id;
+                    uint32_t child_offset_id;
+                    UI::UIPacket::ActionState current_state;
+                    uint32_t* wparam;
+                    uint32_t field_10;
+                    uint32_t field_14;
+                    uint32_t field_18;
+                } packet = {};
+                packet.frame_id = frame_id;
+                packet.child_offset_id = child_offset_id;
+                packet.current_state = action;
+                packet.wparam = &packet.field_14;
+                packet.field_10 = 0;
+                packet.field_14 = 0;
+                packet.field_18 = 0;
+                return UI::SendFrameUIMessage(parent, UI::UIMessage(static_cast<uint32_t>(0x31)), &packet, nullptr);
+            }
+        }
+        return false;
+    }
+
+    bool ButtonFrame::DoubleClick() {
+        return MouseAction(UI::UIPacket::ActionState::MouseDoubleClick);
+    }
+
+    UI::Frame* TabsFrame::AddTab(const wchar_t* tab_name_enc, uint32_t flags, uint32_t child_offset_id, GW::UI::UIInteractionCallback callback, void* wparam) {
+        struct AddTabArgs {
+            const wchar_t* tab_name_enc;
+            uint32_t flags;
+            uint32_t child_offset_id;
+            GW::UI::UIInteractionCallback callback;
+            void* wparam;
+        } args = { tab_name_enc, flags, child_offset_id, callback, wparam };
+        uint32_t frame_id = 0;
+        UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x56)), &args, &frame_id);
+        return UI::GetFrameById(frame_id);
+    }
+
+    bool TabsFrame::DisableTab(uint32_t tab_id) {
+        return UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x57)), reinterpret_cast<void*>(tab_id), nullptr);
+    }
+
+    bool TabsFrame::EnableTab(uint32_t tab_id) {
+        return UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x58)), reinterpret_cast<void*>(tab_id), nullptr);
+    }
+
+    bool TabsFrame::RemoveTab(uint32_t tab_id) {
+        auto* tab_frame = UI::GetChildFrame(this, tab_id);
+        UI::Frame* button_frame = nullptr;
+        if (tab_frame) {
+            auto* shadow = UI::GetChildFrame(this, tab_frame->frame_id);
+            if (shadow == tab_frame) {
+                button_frame = UI::GetChildFrame(this, ~tab_frame->frame_id);
+            }
+        }
+        if (!UI::DestroyUIComponent(tab_frame)) {
+            return false;
+        }
+        return UI::DestroyUIComponent(button_frame);
+    }
+
+    bool TabsFrame::GetCurrentTabIndex(uint32_t* tab_id) {
+        return UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x59)), nullptr, tab_id);
+    }
+
+    bool TabsFrame::GetTabFrameId(uint32_t tab_id, uint32_t* frame_id) {
+        return UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x5a)), reinterpret_cast<void*>(tab_id), frame_id);
+    }
+
+    bool TabsFrame::GetIsTabEnabled(uint32_t tab_id, uint32_t* is_enabled) {
+        return UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x5c)), reinterpret_cast<void*>(tab_id), is_enabled);
+    }
+
+    UI::Frame* TabsFrame::GetTabByLabel(const wchar_t* label) {
+        if (!(label && label[0])) {
+            return nullptr;
+        }
+        for (uint32_t tab_index = 0; tab_index < 10; ++tab_index) {
+            uint32_t tab_frame_id = 0;
+            if (!UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x5a)), reinterpret_cast<void*>(tab_index), &tab_frame_id)) {
+                continue;
+            }
+            auto* tab_frame = UI::GetFrameById(tab_frame_id);
+            if (!tab_frame) {
+                continue;
+            }
+            auto* mirror = UI::GetChildFrame(this, tab_frame->frame_id);
+            if (mirror != tab_frame) {
+                continue;
+            }
+            auto* button_frame = UI::GetChildFrame(this, ~tab_frame->frame_id);
+            if (!button_frame) {
+                continue;
+            }
+            auto* context = UI::GetFrameContext(button_frame);
+            const wchar_t* button_label = nullptr;
+            if (context && *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(context) + 0xc) != 0) {
+                button_label = *reinterpret_cast<const wchar_t**>(reinterpret_cast<uintptr_t>(context) + 4);
+            }
+            if (!(button_label && button_label[0])) {
+                continue;
+            }
+            if (wcscmp(button_label, label) == 0) {
+                return tab_frame;
+            }
+        }
+        return nullptr;
+    }
+
+    UI::Frame* TabsFrame::GetCurrentTab() {
+        void* current_index = nullptr;
+        if (!UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x59)), nullptr, &current_index)) {
+            return nullptr;
+        }
+        uint32_t current_tab_frame_id = 0;
+        if (!UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x5a)), current_index, &current_tab_frame_id)) {
+            return nullptr;
+        }
+        return UI::GetFrameById(current_tab_frame_id);
+    }
+
+    bool TabsFrame::ChooseTab(UI::Frame* tab_frame) {
+        if (!tab_frame) {
+            return false;
+        }
+        auto* token = reinterpret_cast<void*>(tab_frame->frame_id);
+        uint32_t out = 0;
+        if (!UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x5a)), token, &out)) {
+            return false;
+        }
+        return UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x5d)), token, nullptr);
+    }
+
+    bool TabsFrame::ChooseTab(uint32_t tab_index) {
+        uint32_t out = 0;
+        if (!UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x5a)), reinterpret_cast<void*>(tab_index), &out)) {
+            return false;
+        }
+        return UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x5d)), reinterpret_cast<void*>(tab_index), nullptr);
+    }
+
+    ButtonFrame* TabsFrame::GetTabButton(UI::Frame* tab_frame) {
+        if (!tab_frame) {
+            return nullptr;
+        }
+        auto* mirror = UI::GetChildFrame(this, tab_frame->frame_id);
+        if (mirror != tab_frame) {
+            return nullptr;
+        }
+        return reinterpret_cast<ButtonFrame*>(UI::GetChildFrame(this, ~tab_frame->frame_id));
+    }
+
+    uint32_t FrameWithValue::GetValue() {
+        return 0;
+    }
+
+    bool FrameWithValue::SetValue(uint32_t) {
+        return false;
+    }
+
+    ScrollableFrame* ScrollableFrame::Create(uint32_t parent_frame_id, uint32_t flags, uint32_t child_offset_id, ScrollablePageContext* context, const wchar_t* frame_label) {
+        return reinterpret_cast<ScrollableFrame*>(UI::CreateScrollableFrame(parent_frame_id, flags, child_offset_id, context, const_cast<wchar_t*>(frame_label)));
+    }
+
+    bool ScrollableFrame::SetSortHandler(SortHandler_pt sortHandler) {
+        return UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x7ffffff4)), reinterpret_cast<void*>(sortHandler), nullptr);
+    }
+
+    ScrollableFrame::SortHandler_pt ScrollableFrame::GetSortHandler() {
+        auto* page = UI::GetChildFrame(this, 0);
+        page = UI::GetChildFrame(page, 0);
+        auto* context = UI::GetFrameContext(page);
+        return context ? *reinterpret_cast<SortHandler_pt*>(reinterpret_cast<uintptr_t>(context) + 0xc) : nullptr;
+    }
+
+    bool ScrollableFrame::ClearItems() {
+        return UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x56)), nullptr, nullptr);
+    }
+
+    bool ScrollableFrame::RemoveItem(uint32_t child_offset_id) {
+        return UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x58)), reinterpret_cast<void*>(child_offset_id), nullptr);
+    }
+
+    bool ScrollableFrame::AddItem(uint32_t flags, uint32_t child_offset_id, GW::UI::UIInteractionCallback callback) {
+        struct AddItemArgs {
+            uint32_t flags;
+            uint32_t child_offset_id;
+            GW::UI::UIInteractionCallback callback;
+            void* reserved;
+            uint32_t sentinel;
+        } args = { flags, child_offset_id, callback, nullptr, 0 };
+        return UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x57)), &args.flags, &args.reserved);
+    }
+
+    uint32_t ScrollableFrame::GetItemFrameId(uint32_t child_offset_id) {
+        uint32_t frame_id = 0;
+        UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x5b)), reinterpret_cast<void*>(child_offset_id), &frame_id);
+        return frame_id;
+    }
+
+    bool ScrollableFrame::GetSelectedValue(uint32_t* selected_value) {
+        uint64_t selected = 0;
+        const bool ok = UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x67)), nullptr, &selected);
+        if (!ok) {
+            return false;
+        }
+        *selected_value = static_cast<uint32_t>(selected >> 32);
+        return static_cast<uint32_t>(selected) != 0;
+    }
+
+    uint32_t ScrollableFrame::GetFirstChildFrameId(uint32_t* offset_of_child_out) {
+        struct IterateArgs {
+            uint32_t mode;
+            uint32_t reserved;
+            uint32_t** out_ptr;
+            uint32_t* offset_out;
+        } args = { 2, 0, &offset_of_child_out, offset_of_child_out };
+        offset_of_child_out = nullptr;
+        if (!UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x59)), &args.mode, nullptr)) {
+            return 0;
+        }
+        return reinterpret_cast<uint32_t>(offset_of_child_out);
+    }
+
+    uint32_t ScrollableFrame::GetNextChildFrameId(uint32_t frame_id, uint32_t* offset_of_child_out) {
+        struct IterateArgs {
+            uint32_t mode;
+            uint32_t frame_id;
+            uint32_t* frame_id_io;
+            uint32_t* offset_out;
+        } args = { 0, frame_id, reinterpret_cast<uint32_t*>(&frame_id), offset_of_child_out };
+        frame_id = 0;
+        if (!UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x59)), &args.mode, nullptr)) {
+            return 0;
+        }
+        return frame_id;
+    }
+
+    uint32_t ScrollableFrame::GetLastChildFrameId(uint32_t* offset_of_child_out) {
+        struct IterateArgs {
+            uint32_t mode;
+            uint32_t reserved;
+            uint32_t** out_ptr;
+            uint32_t* offset_out;
+        } args = { 3, 0, &offset_of_child_out, offset_of_child_out };
+        offset_of_child_out = nullptr;
+        if (!UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x59)), &args.mode, nullptr)) {
+            return 0;
+        }
+        return reinterpret_cast<uint32_t>(offset_of_child_out);
+    }
+
+    uint32_t ScrollableFrame::GetPrevChildFrameId(uint32_t frame_id, uint32_t* offset_of_child_out) {
+        struct IterateArgs {
+            uint32_t mode;
+            uint32_t frame_id;
+            uint32_t* frame_id_io;
+            uint32_t* offset_out;
+        } args = { 1, frame_id, reinterpret_cast<uint32_t*>(&frame_id), offset_of_child_out };
+        frame_id = 0;
+        if (!UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x59)), &args.mode, nullptr)) {
+            return 0;
+        }
+        return frame_id;
+    }
+
+    bool ScrollableFrame::GetItemRect(uint32_t child_offset_id, float rect[4]) {
+        return UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x5c)), reinterpret_cast<void*>(child_offset_id), rect);
+    }
+
+    bool ScrollableFrame::GetCount(uint32_t* size) {
+        if (!size) {
+            return false;
+        }
+        *size = GetItems(nullptr, 0);
+        return true;
+    }
+
+    uint32_t ScrollableFrame::GetItems(uint32_t* child_frame_id_buffer, uint32_t buffer_len) {
+        auto* out_buffer = child_frame_id_buffer;
+        struct GetItemsArgs {
+            uint32_t mode;
+            uint32_t reserved;
+            uint32_t** frame_id_ptr;
+            uint32_t reserved_2;
+            ScrollableFrame* self;
+        } args = {};
+        args.mode = 2;
+        args.frame_id_ptr = &child_frame_id_buffer;
+        args.reserved_2 = 0;
+        args.self = this;
+        child_frame_id_buffer = nullptr;
+
+        uint32_t count = 0;
+        if (!UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x59)), &args.mode, nullptr) || !child_frame_id_buffer) {
+            return 0;
+        }
+
+        auto* current_frame_id = child_frame_id_buffer;
+        while (current_frame_id) {
+            auto* frame = UI::GetFrameById(reinterpret_cast<uint32_t>(current_frame_id));
+            if (!frame) {
+                return count;
+            }
+
+            args.mode = 0;
+            args.reserved = frame->frame_id;
+            args.frame_id_ptr = &child_frame_id_buffer;
+            args.reserved_2 = 0;
+            child_frame_id_buffer = nullptr;
+            const bool ok = UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x59)), &args.mode, nullptr);
+            auto* next_frame_id = ok ? child_frame_id_buffer : nullptr;
+
+            if (((frame->frame_state >> 9) & 1) == 0) {
+                if (out_buffer && count < buffer_len) {
+                    out_buffer[count] = frame->frame_id;
+                }
+                ++count;
+            }
+
+            current_frame_id = next_frame_id;
+        }
+
+        return count;
+    }
+
+    UI::Frame* ScrollableFrame::GetPage() {
+        auto* page = UI::GetChildFrame(this, 0);
+        return UI::GetChildFrame(page, 0);
+    }
+
+    UI::Frame* ScrollableFrame::SetPage(ScrollablePageContext* context) {
+        UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x7ffffff5)), context, nullptr);
+        return GetPage();
+    }
+
+    const wchar_t* EditableTextFrame::GetValue() {
+        auto* context = UI::GetFrameContext(this);
+        return context ? *reinterpret_cast<const wchar_t**>(reinterpret_cast<uintptr_t>(context) + 0x48) : nullptr;
+    }
+
+    bool EditableTextFrame::SetValue(const wchar_t* value) {
+        if (!(value && UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x5e)), const_cast<wchar_t*>(value), nullptr))) {
+            return false;
+        }
+        return SendValueChangedMessage(this, value);
+    }
+
+    bool EditableTextFrame::SetMaxLength(uint32_t max_length) {
+        return max_length && UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x5a)), reinterpret_cast<void*>(max_length), nullptr);
+    }
+
+    bool EditableTextFrame::IsReadOnly() {
+        uint32_t state = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(this)) & 0xffffffu;
+        UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x56)), reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(&state) + 3), nullptr);
+        return reinterpret_cast<uint8_t*>(&state)[3] != 0;
+    }
+
+    bool EditableTextFrame::SetReadOnly(bool readonly) {
+        return UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x5b)), reinterpret_cast<void*>(static_cast<uintptr_t>(readonly)), nullptr);
+    }
+
+    uint32_t ProgressBar::GetValue() {
+        uint32_t value = 0;
+        UI::SendFrameUIMessage(ValueFrame(this), UI::UIMessage(static_cast<uint32_t>(0x56)), nullptr, &value);
+        return value;
+    }
+
+    bool ProgressBar::SetValue(uint32_t value) {
+        return UI::SendFrameUIMessage(ValueFrame(this), UI::UIMessage(static_cast<uint32_t>(0x58)), reinterpret_cast<void*>(value), nullptr);
+    }
+
+    bool ProgressBar::SetMax(uint32_t value) {
+        return UI::SendFrameUIMessage(ValueFrame(this), UI::UIMessage(static_cast<uint32_t>(0x5a)), reinterpret_cast<void*>(value), nullptr);
+    }
+
+    bool ProgressBar::SetColorId(uint32_t color_id) {
+        return color_id < 9 && UI::SendFrameUIMessage(ValueFrame(this), UI::UIMessage(static_cast<uint32_t>(0x65)), reinterpret_cast<void*>(color_id), nullptr);
+    }
+
+    bool ProgressBar::SetStyle(ProgressBarStyle style) {
+        if (style > ProgressBarStyle::kOlive) {
+            FatalAssert("style >= ProgressBarStyle::kPeach && style <= ProgressBarStyle::kOlive", "C:\\GitRepositories\\GWCA\\Source\\Frame.cpp", 0x2a0, "GW::ProgressBar::SetStyle");
+        }
+        return UI::SendFrameUIMessage(ValueFrame(this), UI::UIMessage(static_cast<uint32_t>(100)), reinterpret_cast<void*>(static_cast<uintptr_t>(style)), nullptr);
+    }
+
+    TextLabelFrame* TextLabelFrame::Create(uint32_t parent_frame_id, uint32_t flags, uint32_t child_offset_id, const wchar_t* text_label_enc_string, const wchar_t* frame_label) {
+        return reinterpret_cast<TextLabelFrame*>(UI::CreateTextLabelFrame(parent_frame_id, flags, child_offset_id, const_cast<wchar_t*>(text_label_enc_string), const_cast<wchar_t*>(frame_label)));
+    }
+
+    const wchar_t* TextLabelFrame::GetEncodedLabel() {
+        auto* context = UI::GetFrameContext(this);
+        if (context && *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(context) + 0xc) != 0) {
+            return *reinterpret_cast<const wchar_t**>(reinterpret_cast<uintptr_t>(context) + 4);
+        }
+        return nullptr;
+    }
+
+    const wchar_t* TextLabelFrame::GetDecodedLabel() {
+        auto* context = UI::GetFrameContext(this);
+        if (context && *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(context) + 0xc) != 0) {
+            const auto* enc = *reinterpret_cast<const wchar_t**>(reinterpret_cast<uintptr_t>(context) + 4);
+            const auto len = wcslen(enc) + 1;
+            if (len < *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(context) + 0xc)) {
+                return enc + len;
+            }
+        }
+        return nullptr;
+    }
+
+    bool TextLabelFrame::SetLabel(const wchar_t* enc_string) {
+        if (enc_string != nullptr) {
+            const auto ok = UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x5c)), const_cast<wchar_t*>(enc_string), nullptr);
+            if (ok) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool TextLabelFrame::SetFont(uint32_t font_id) {
+        if (field93_0x194 == font_id) {
+            return true;
+        }
+        if (font_id > 0xe) {
+            return false;
+        }
+        field93_0x194 = font_id;
+        return UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x39)), nullptr, nullptr);
+    }
+
+    const wchar_t* MultiLineTextLabelFrame::GetEncodedLabel() {
+        auto* context = reinterpret_cast<uint32_t*>(UI::GetFrameContext(this));
+        if (context && context[2] != 0) {
+            return reinterpret_cast<const wchar_t*>(context[0]);
+        }
+        return nullptr;
+    }
+
+    const wchar_t* MultiLineTextLabelFrame::GetDecodedLabel() {
+        auto* context = reinterpret_cast<uint32_t*>(UI::GetFrameContext(this));
+        if (context && context[2] != 0) {
+            const auto* enc = reinterpret_cast<const wchar_t*>(context[0]);
+            const auto len = wcslen(enc) + 1;
+            if (len < context[2]) {
+                return enc + len;
+            }
+        }
+        return nullptr;
+    }
+
+    bool MultiLineTextLabelFrame::SetLabel(const wchar_t* enc_string) {
+        if (enc_string != nullptr) {
+            const auto ok = UI::SendFrameUIMessage(this, UI::UIMessage(static_cast<uint32_t>(0x62)), const_cast<wchar_t*>(enc_string), nullptr);
+            if (ok) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    CheckboxFrame* CheckboxFrame::Create(uint32_t parent_frame_id, uint32_t flags, uint32_t child_offset_id, const wchar_t* text_label_enc_string, const wchar_t* frame_label) {
+        return reinterpret_cast<CheckboxFrame*>(UI::CreateCheckboxFrame(parent_frame_id, flags, child_offset_id, const_cast<wchar_t*>(text_label_enc_string), const_cast<wchar_t*>(frame_label)));
+    }
+
+    bool CheckboxFrame::IsChecked() {
+        int checked = 0;
+        UI::SendFrameUIMessage(ValueFrame(this), UI::UIMessage(static_cast<uint32_t>(0x58)), nullptr, &checked);
+        return checked == 1;
+    }
+
+    bool CheckboxFrame::SetChecked(bool checked) {
+        int current = 0;
+        auto* frame = ValueFrame(this);
+        UI::SendFrameUIMessage(frame, UI::UIMessage(static_cast<uint32_t>(0x58)), nullptr, &current);
+        if ((current == 1) != checked) {
+            return UI::SendFrameUIMessage(frame, UI::UIMessage(static_cast<uint32_t>(0x57)), reinterpret_cast<void*>(static_cast<uintptr_t>(checked)), nullptr);
+        }
+        return true;
+    }
+
+    uint32_t CheckboxFrame::GetValue() {
+        int checked = 0;
+        UI::SendFrameUIMessage(ValueFrame(this), UI::UIMessage(static_cast<uint32_t>(0x58)), nullptr, &checked);
+        return checked == 1;
+    }
+
+    bool CheckboxFrame::SetValue(uint32_t value) {
+        return SetChecked(value != 0);
+    }
+
+    std::vector<uint32_t> DropdownFrame::GetOptions() {
+        std::vector<uint32_t> options;
+        auto* frame = ValueFrame(this);
+        auto* context = reinterpret_cast<int*>(UI::GetFrameContext(frame));
+        if (!context) {
+            return options;
+        }
+
+        bool has_value_mapping = false;
+        for (int entry = *context, end = *context + context[2] * 0x20; entry != end; entry += 0x20) {
+            if (*reinterpret_cast<int*>(entry + 8) != 0) {
+                has_value_mapping = true;
+                break;
+            }
+        }
+
+        for (uint32_t index = 0; index < static_cast<uint32_t>(context[2]); ++index) {
+            if (has_value_mapping) {
+                options.push_back(*reinterpret_cast<uint32_t*>(*context + 8 + index * 0x20));
+            }
+            else {
+                options.push_back(index);
+            }
+        }
+        return options;
+    }
+
+    bool DropdownFrame::SelectOption(uint32_t value) {
+        auto* context = reinterpret_cast<int*>(UI::GetFrameContext(ValueFrame(this)));
+        uint32_t index = value;
+        if (context) {
+            bool has_value_mapping = false;
+            for (int entry = *context, end = *context + context[2] * 0x20; entry != end; entry += 0x20) {
+                if (*reinterpret_cast<int*>(entry + 8) != 0) {
+                    has_value_mapping = true;
+                    break;
+                }
+            }
+            if (has_value_mapping && !GetOptionIndex(value, &index)) {
+                return false;
+            }
+        }
+        return SelectIndex(index);
+    }
+
+    bool DropdownFrame::SelectIndex(uint32_t index) {
+        auto* frame = ValueFrame(this);
+        auto* context = UI::GetFrameContext(frame);
+        if (!(context && index < *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(context) + 8))) {
+            return false;
+        }
+        if (!UI::SendFrameUIMessage(frame, UI::UIMessage(static_cast<uint32_t>(0x61)), reinterpret_cast<void*>(index), nullptr)) {
+            return false;
+        }
+        return SendValueChangedMessage(frame, index);
+    }
+
+    bool DropdownFrame::AddOption(const wchar_t* label_enc_string, uint32_t value) {
+        struct AddOptionArgs {
+            const wchar_t* label_enc_string;
+            uint32_t value;
+        } args = { label_enc_string, value };
+        return label_enc_string && UI::SendFrameUIMessage(ValueFrame(this), UI::UIMessage(static_cast<uint32_t>(0x57)), &args, nullptr);
+    }
+
+    bool DropdownFrame::GetCount(uint32_t* count) {
+        auto* context = UI::GetFrameContext(ValueFrame(this));
+        if (!context) {
+            return false;
+        }
+        *count = *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(context) + 8);
+        return true;
+    }
+
+    bool DropdownFrame::GetOptionValue(uint32_t index, uint32_t* value) {
+        auto options = GetOptions();
+        if (index >= options.size()) {
+            return false;
+        }
+        if (HasValueMapping()) {
+            *value = options[index];
+        }
+        else {
+            *value = index;
+        }
+        return true;
+    }
+
+    bool DropdownFrame::GetOptionIndex(uint32_t value, uint32_t* index) {
+        auto options = GetOptions();
+        if (HasValueMapping()) {
+            for (uint32_t i = 0; i < options.size(); ++i) {
+                if (options[i] == value) {
+                    *index = i;
+                    return true;
+                }
+            }
+            return false;
+        }
+        if (value >= options.size()) {
+            return false;
+        }
+        *index = value;
+        return true;
+    }
+
+    bool DropdownFrame::GetSelectedIndex(uint32_t* index) {
+        auto* context = UI::GetFrameContext(ValueFrame(this));
+        if (!context) {
+            return false;
+        }
+        *index = *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(context) + 0x58);
+        return true;
+    }
+
+    bool DropdownFrame::HasValueMapping() {
+        auto* context = reinterpret_cast<int*>(UI::GetFrameContext(ValueFrame(this)));
+        if (!context) {
+            return false;
+        }
+        for (int entry = *context, end = *context + context[2] * 0x20; entry != end; entry += 0x20) {
+            if (*reinterpret_cast<int*>(entry + 8) != 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    uint32_t DropdownFrame::GetValue() {
+        auto* context = UI::GetFrameContext(ValueFrame(this));
+        if (!context) {
+            return 0;
+        }
+        uint32_t value = 0;
+        return GetOptionValue(*reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(context) + 0x58), &value) ? value : 0;
+    }
+
+    bool DropdownFrame::SetValue(uint32_t value) {
+        return SelectOption(value);
+    }
+
+    bool SliderFrame::GetValue(uint32_t* selected_value) {
+        return UI::SendFrameUIMessage(ValueFrame(this), UI::UIMessage(static_cast<uint32_t>(0x58)), selected_value, nullptr);
+    }
+
+    bool SliderFrame::SetValue(uint32_t value) {
+        auto* frame = ValueFrame(this);
+        auto* context = UI::GetFrameContext(frame);
+        if (!(context && *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(context) + 0xc) <= value &&
+            value <= *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(context) + 0x10))) {
+            return false;
+        }
+        UI::SendFrameUIMessage(frame, UI::UIMessage(static_cast<uint32_t>(0x57)), reinterpret_cast<void*>(value), nullptr);
+        return SendValueChangedMessage(frame, value);
+    }
+
+    uint32_t SliderFrame::GetValue() {
+        uint32_t value = 0;
+        if (!UI::SendFrameUIMessage(ValueFrame(this), UI::UIMessage(static_cast<uint32_t>(0x58)), &value, nullptr)) {
+            value = 0;
+        }
+        return value;
     }
 
 } // namespace GW
